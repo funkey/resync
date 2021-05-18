@@ -1,0 +1,12 @@
+ReSync
+======
+
+A command line tool to synchronize PDF documents with the reMarkable tablet.
+
+Very much under construction.
+
+Credits
+-------
+
+This program makes heavy use of source code taken from the excellent
+[remy](https://github.com/bordaigorl/remy/) project.

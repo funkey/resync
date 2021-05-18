@@ -1,0 +1,5 @@
+arrow
+paramiko
+PyPDF2
+PyQt5
+simplification

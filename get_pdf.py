@@ -11,9 +11,13 @@ logging.getLogger('paramiko').setLevel(logging.INFO)
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    '-t', '--target',
+    '--uid',
     type=str,
-    help="Target folder on remarkable")
+    help="UID of the PDF to get")
+parser.add_argument(
+    '--filename',
+    type=str,
+    help="Local filename to store the PDF")
 
 
 if __name__ == '__main__':
@@ -22,7 +26,5 @@ if __name__ == '__main__':
 
     client = RemarkableClient('10.11.99.1')
 
-    pdfs = client.list_pdfs(args.target.split('/'))
-
-    for pdf in pdfs:
-        print(pdf)
+    pdf = client.index.get_entry_by_uid(args.uid)
+    client.get_pdf(pdf, args.filename, overwrite=True)

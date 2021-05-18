@@ -48,22 +48,47 @@ class Folder(Entry):
         self.folders[f.name].append(f)
         self.entries[f.name].append(f)
 
-class Notebook(Entry):
+    def __repr__(self):
+
+        return f"DIR: {self.metadata['visibleName']} {self.uid}"
+
+class Document(Entry):
 
     def __init__(self, uid, metadata, content):
 
         super().__init__(uid, metadata, content)
 
+        if 'pages' in content:
+            self.pages = content['pages']
+        else:
+            self.pages = []
 
-class Pdf(Entry):
+class Notebook(Document):
+
+    def __init__(self, uid, metadata, content):
+
+        super().__init__(uid, metadata, content)
+
+    def __repr__(self):
+
+        return f"NBK: {self.metadata['visibleName']} {self.uid}"
+
+class Pdf(Document):
 
     def __init__(self, uid, metadata, content):
 
         super().__init__(uid, metadata, content)
 
+    def __repr__(self):
 
-class EBook(Entry):
+        return f"PDF: {self.metadata['visibleName']} {self.uid}"
+
+class EBook(Document):
 
     def __init__(self, uid, metadata, content):
 
         super().__init__(uid, metadata, content)
+
+    def __repr__(self):
+
+        return f"EBK: {self.metadata['visibleName']} {self.uid}"

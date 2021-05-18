@@ -38,13 +38,14 @@ class SshFileSystem:
 
         return False
 
-    def read_file(self, remote):
+    def read_file(self, remote, binary=False):
         '''Read file ``remote`` (relative to document root).'''
 
         path = self.__to_remote_path(remote)
 
-        content = ""
-        for line in self.sftp.open(path, 'r'):
+        content = "" if not binary else b''
+        mode = 'r' if not binary else 'rb'
+        for line in self.sftp.open(path, mode):
             content += line
 
         return content
