@@ -90,7 +90,7 @@ class RemarkableIndex:
         root_folder = Folder(
             '',
             {
-                'visibleName': 'reMarkable',
+                'visibleName': '/',
                 'parent': None,
                 'deleted': False,
                 'type': FOLDER_TYPE
