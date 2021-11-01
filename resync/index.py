@@ -30,7 +30,9 @@ class RemarkableIndex:
     def get_entry_by_path(self, path):
 
         entry = self.root_folder
-        for segment in path:
+        for segment in path.parts:
+            if segment == '/':
+                continue
             entries = entry.entries[segment]
             if len(entries) > 1:
                 raise KeyError("The path %s is not unique" % path)
