@@ -87,6 +87,8 @@ class RemarkableClient:
         self.fs.write_file('', entry.uid + '.pagedata')
         self.fs.make_dir(entry.uid)
 
+        entry.synced = True
+
         return entry
 
     def read_entry_data(self, entry, annotations_only=False):

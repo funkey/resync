@@ -1,5 +1,5 @@
 from .client import RemarkableClient
-from .entries import Folder
+from .entries import Folder, Pdf
 from .node_stat import NodeStat
 from .refile import ReFile
 from pathlib import Path
@@ -33,6 +33,8 @@ class ReFs(fuse.Fuse):
 
         # map from Entry UID to ReFile, lazily populated as needed
         self.files = {}
+
+        logger.info("ReFs mounted")
 
     def getattr(self, path):
 
@@ -123,10 +125,37 @@ class ReFs(fuse.Fuse):
 
         return self.__get_file(entry).write(data, offset)
 
+    def release(self, path, flags):
+
+        path = Path(path)
+
+        print(f"release {path} {flags}")
+        if path not in self.entries:
+            return -errno.ENOENT
+
+        entry = self.entries[path]
+
+        return self.__get_file(entry).release(flags)
+
     def mknod(self, path, mode, dev):
 
-        # TODO: create empty ReFile
-        pass
+        path = Path(path)
+
+        print(f"mknod {path}")
+        if path.suffix != '.pdf':
+            logger.error("Only creation of PDF files allowed")
+            return -errno.EACCES
+
+        entry = self.client.create_entry(
+            name=path.with_suffix('').name,
+            path=path.parent,
+            cls=Pdf)
+        refile = ReFile(entry, self.client)
+
+        self.entries[path] = entry
+        self.files[entry.uid] = refile
+
+        print(f"  created empty PDF document {entry.uid}")
 
     def mkdir(self, path, mode):
 
@@ -146,10 +175,14 @@ class ReFs(fuse.Fuse):
 
     def fsync(self, **kwargs):
 
+        logger.debug("ReFs::fsync %s", kwargs)
+
         # TODO: write all created/changed files back
         pass
 
     def flush(self, path):
+
+        logger.debug("ReFs::flush %s", path)
 
         path = Path(path)
 
@@ -170,6 +203,13 @@ class ReFs(fuse.Fuse):
         entry = self.entries[path]
 
         self.__get_file(entry).truncate(length)
+
+    def rename(self, source, target):
+
+        source = Path(source)
+        target = Path(target)
+
+        # TODO: move entry
 
     def __get_entries(self, path):
         '''Recursively get all `class:Entry`s by their path.'''

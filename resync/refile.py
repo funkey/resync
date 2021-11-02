@@ -1,18 +1,20 @@
 from .node_stat import NodeStat
+import logging
+import os
 import stat
 import time
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 class ReFile:
 
-    def __init__(self, document, client):
+    def __init__(self, entry, client):
 
-        self.document = document
+        self.entry = entry
         self.client = client
         self._data = bytearray(b'')
+        self.data_changed = False
 
         self.mtime = int(time.time())  # modified (written to)
         self.atime = int(time.time())  # accessed (read from or written to)
@@ -20,14 +22,25 @@ class ReFile:
 
     @property
     def size(self):
+
         return len(self._data)
 
     def open(self, flags):
 
         logger.debug("ReFile::open, %s", flags)
 
-        if self.size == 0 and self.document is not None:
-            self._data = self.client.read_pdf(self.document)
+        # unsynced entries do not have data yet
+        if not self.entry.synced:
+            return
+
+        if flags & os.O_WRONLY:
+            logger.debug("  open write-only, will not attempt to update data")
+            return
+
+        # synced entry, but no data: create PDF data
+        if self.size == 0:
+            self._data = bytearray(self.client.read_entry_data(self.entry))
+            self.data_changed = False
 
     def read(self, length, offset):
 
@@ -44,7 +57,7 @@ class ReFile:
 
     def write(self, data, offset):
 
-        logger.debug("ReFile::write, %s @ %d", data, offset)
+        logger.debug("ReFile::write, %d bytes @ %d", len(data), offset)
 
         length = len(data)
         diff = offset + length - self.size
@@ -56,15 +69,22 @@ class ReFile:
             self._data += pad
 
         self._data[offset:offset + length] = data
+        self.data_changed = True
 
         return length
 
     def release(self, flags):
 
-        pass
+        logger.debug("ReFile::release")
+
+        if self.data_changed:
+
+            logger.debug("  data changed, writing to reMarkable...")
+            self.client.write_entry_data(self._data, self.entry)
 
     def _fflush(self):
 
+        # TODO: needed?
         pass
 
     def fsync(self, isfsyncfile):
@@ -89,7 +109,7 @@ class ReFile:
 
         return node_stat
 
-    def ftruncate(self, length):
+    def truncate(self, length):
 
         if length < self.size:
             self._data = self._data[:length]
