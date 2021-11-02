@@ -5,11 +5,12 @@ import time
 
 class ReFile:
 
-    def __init__(self, document):
+    def __init__(self, document, client):
 
         print(f"ReFile::init, {document}")
 
         self.document = document
+        self.client = client
         self._data = bytearray(b'')
 
         self.mtime = int(time.time())  # modified (written to)
@@ -19,6 +20,13 @@ class ReFile:
     @property
     def size(self):
         return len(self._data)
+
+    def open(self, flags):
+
+        print(f"ReFile::open, {flags}")
+
+        if self.size == 0 and self.document is not None:
+            self._data = self.client.read_pdf(self.document)
 
     def read(self, length, offset):
 

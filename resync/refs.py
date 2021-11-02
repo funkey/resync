@@ -28,7 +28,7 @@ class ReFs(fuse.Fuse):
         # map from Path to Entry, for each entry on the reMarkable
         self.entries = self.__get_entries(Path('/'))
 
-        # map from Entry to ReFile, lazily populated as needed
+        # map from Entry UID to ReFile, lazily populated as needed
         self.files = {}
 
     def fsinit(self):
@@ -126,6 +126,10 @@ class ReFs(fuse.Fuse):
             print("  open write-only")
         if (flags & os.O_RDWR):
             print("  open read-write")
+
+        entry = self.entries[path]
+
+        return self.__get_file(entry).open(flags)
 
     def read(self, path, length, offset):
 
@@ -231,14 +235,18 @@ class ReFs(fuse.Fuse):
 
     def __get_file(self, entry):
 
+        print(f"  getting file for {entry}")
+
         if entry.uid in self.files:
+            print(f"  already exists, reusing")
             return self.files[entry.uid]
 
         if isinstance(entry, Folder):
             raise RuntimeError(f"Entry {entry} is not a file")
 
-        refile = ReFile(entry)
-        self.files[entry] = refile
+        print(f"  creating new file object")
+        refile = ReFile(entry, self.client)
+        self.files[entry.uid] = refile
 
         return refile
 

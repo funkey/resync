@@ -73,24 +73,37 @@ class RemarkableClient:
     def read_pdf(self, path):
         '''Read PDF at ``path``, including annotations.'''
 
-        pdf = self.get_entry_by_path(path)
+        if isinstance(path, str) or isinstance(path, Path):
+            pdf = self.get_entry_by_path(path)
+        else:
+            pdf = path
         assert isinstance(pdf, Document)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
 
             tmp_dir = Path(tmp_dir)
-            original_pdf = tmp_dir / pdf.uid + '.pdf'
-            annotations_pdf = tmp_dir / pdf.uid + '.annotations'
-            merged_pdf = tmp_dir / pdf.uid + '_merged.pdf'
+            original_pdf = (tmp_dir / pdf.uid).with_suffix('.pdf')
+            annotations_pdf = (tmp_dir / pdf.uid).with_suffix('.annotations')
+            merged_pdf = (tmp_dir / pdf.uid).with_suffix('.merged.pdf')
+
+            logger.info("Creating PDF in %s", tmp_dir)
 
             # copy the original PDF to the temp dir
-            self.fs.get_file(pdf.uid + '.pdf', original_pdf)
+            logger.info("Getting original PDF...")
+            try:
+                self.fs.get_file(pdf.uid + '.pdf', original_pdf)
+            except Exception as e:
+                logger.error("got %s", e)
+                raise
+            logger.info("Done.")
 
             # read the lines for each page stored along the PDF file
+            logger.info("Getting annotations...")
             page_annotations = [
                 read_lines_document(self.fs, pdf.uid, page_uid)
                 for page_uid in pdf.pages
             ]
+            logger.info("Done.")
 
             # create a separate PDF for the annotations and merge it with the
             # original PDF

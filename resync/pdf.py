@@ -55,7 +55,7 @@ def create_pdf(scenes, filename):
 
     printer = QPrinter(QPrinter.HighResolution)
     printer.setOutputFormat(QPrinter.PdfFormat)
-    printer.setOutputFileName(filename)
+    printer.setOutputFileName(str(filename))
     printer.setPaperSize(QSizeF(HEIGHT_MM, WIDTH_MM), QPrinter.Millimeter)
     printer.setPageMargins(0, 0, 0, 0, QPrinter.Millimeter)
     painter = QPainter()
@@ -73,8 +73,8 @@ def create_pdf(scenes, filename):
 
 def merge_pdfs(pdf1, pdf2, target, ranges=None, rotate=0):
 
-    reader1 = PdfFileReader(pdf1, strict=False)
-    reader2 = PdfFileReader(pdf2, strict=False)
+    reader1 = PdfFileReader(str(pdf1), strict=False)
+    reader2 = PdfFileReader(str(pdf2), strict=False)
 
     if ranges is None:
         num_pages = min(reader1.getNumPages(), reader2.getNumPages())
