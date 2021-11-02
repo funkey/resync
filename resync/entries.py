@@ -4,10 +4,11 @@ from .constants import TRASH_ID
 
 class Entry:
 
-    def __init__(self, uid, metadata, content):
+    def __init__(self, uid, metadata, content, synced=True):
         self.uid = uid
         self.metadata = metadata
         self.content = content
+        self.synced = synced
 
     @property
     def name(self):
@@ -26,9 +27,9 @@ class Entry:
 
 class Folder(Entry):
 
-    def __init__(self, uid, metadata, content):
+    def __init__(self, uid, metadata, content, synced=True):
 
-        super().__init__(uid, metadata, content)
+        super().__init__(uid, metadata, content, synced)
         self.files = defaultdict(lambda: [])
         self.folders = defaultdict(lambda: [])
         self.entries = defaultdict(lambda: [])
@@ -54,9 +55,9 @@ class Folder(Entry):
 
 class Document(Entry):
 
-    def __init__(self, uid, metadata, content):
+    def __init__(self, uid, metadata, content, synced=True):
 
-        super().__init__(uid, metadata, content)
+        super().__init__(uid, metadata, content, synced)
 
         if 'pages' in content:
             self.pages = content['pages']
@@ -65,9 +66,9 @@ class Document(Entry):
 
 class Notebook(Document):
 
-    def __init__(self, uid, metadata, content):
+    def __init__(self, uid, metadata, content, synced=True):
 
-        super().__init__(uid, metadata, content)
+        super().__init__(uid, metadata, content, synced)
 
     def __repr__(self):
 
@@ -75,9 +76,9 @@ class Notebook(Document):
 
 class Pdf(Document):
 
-    def __init__(self, uid, metadata, content):
+    def __init__(self, uid, metadata, content, synced=True):
 
-        super().__init__(uid, metadata, content)
+        super().__init__(uid, metadata, content, synced)
 
     def __repr__(self):
 
@@ -85,9 +86,9 @@ class Pdf(Document):
 
 class EBook(Document):
 
-    def __init__(self, uid, metadata, content):
+    def __init__(self, uid, metadata, content, synced=True):
 
-        super().__init__(uid, metadata, content)
+        super().__init__(uid, metadata, content, synced)
 
     def __repr__(self):
 
