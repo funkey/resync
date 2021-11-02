@@ -70,7 +70,7 @@ class RemarkableClient:
 
         return entry
 
-    def read_pdf(self, path):
+    def read_pdf(self, path, annotations_only=False):
         '''Read PDF at ``path``, including annotations.'''
 
         if isinstance(path, str) or isinstance(path, Path):
@@ -89,13 +89,16 @@ class RemarkableClient:
             logger.info("Creating PDF in %s", tmp_dir)
 
             # copy the original PDF to the temp dir
-            logger.info("Getting original PDF...")
             try:
+
+                logger.info("Getting original PDF...")
                 self.fs.get_file(pdf.uid + '.pdf', original_pdf)
+                logger.info("Done.")
+
             except Exception as e:
-                logger.error("got %s", e)
-                raise
-            logger.info("Done.")
+
+                logger.error("Could not get original PDF: %s", e)
+                annotations_only = True
 
             # read the lines for each page stored along the PDF file
             logger.info("Getting annotations...")
@@ -111,12 +114,20 @@ class RemarkableClient:
             create_annotations_pdf(page_annotations, annotations_pdf)
             logger.debug("...done.")
 
-            logger.debug("Merging PDFs...")
-            merge_pdfs(original_pdf, annotations_pdf, merged_pdf)
-            logger.debug("...done.")
+            if annotations_only:
+
+                final_pdf = annotations_pdf
+
+            else:
+
+                logger.debug("Merging PDFs...")
+                merge_pdfs(original_pdf, annotations_pdf, merged_pdf)
+                logger.debug("...done.")
+
+                final_pdf = merged_pdf
 
             # read and return content of merged PDF
-            with open(merged_pdf, mode='rb') as f:
+            with open(final_pdf, mode='rb') as f:
                 return f.read()
 
     def put_pdf(self, local, remote):
