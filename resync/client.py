@@ -8,7 +8,7 @@ import tempfile
 from .constants import (
     PDF_BASE_METADATA,
     PDF_BASE_CONTENT)
-from .entries import Pdf, Document
+from .entries import Document, Notebook, Pdf
 from .filesystem import SshFileSystem
 from .index import RemarkableIndex
 from .lines import read_lines_document
@@ -33,6 +33,7 @@ class RemarkableClient:
         self.index = RemarkableIndex(self.fs)
 
     def get_entry(self, path, typ=None):
+        '''Get an Entry by its path.'''
 
         path = Path(path)
 
@@ -46,45 +47,75 @@ class RemarkableClient:
 
         return entry
 
-    def write_pdf(self, data, name, path):
-        '''Write a PDF with ``data`` as ``name`` in ``path``.'''
+    def create_entry(self, name, path, cls):
+        '''Create a new entry. The new entry will not be written to the
+        reMarkable until ``write_entry_data`` is called.'''
 
         uid = self.index.create_new_uid()
         parent_folder = self.index.get_entry_by_path(path)
 
-        meta = PDF_BASE_METADATA.copy()
-        meta['visibleName'] = name
-        meta['lastModified'] = str(arrow.utcnow().timestamp() * 1000)
-        meta['parent'] = parent_folder.uid
+        if cls == Pdf:
 
-        content = PDF_BASE_CONTENT.copy()
+            metadata = PDF_BASE_METADATA.copy()
+            metadata['visibleName'] = name
+            metadata['lastModified'] = str(arrow.utcnow().timestamp() * 1000)
+            metadata['parent'] = parent_folder.uid
 
-        self.fs.write_file(data, uid + '.pdf')
-        self.fs.write_file(to_json(meta), uid + '.metadata')
-        self.fs.write_file(to_json(content), uid + '.content')
-        self.fs.write_file('', uid + '.pagedata')
-        self.fs.make_dir(uid)
+            content = PDF_BASE_CONTENT.copy()
 
-        entry = Pdf(uid, meta, content)
+            entry = Pdf(uid, metadata, content, synced=False)
+
+        else:
+
+            raise RuntimeError(
+                "Creating entries other than Pdf not yet implemented")
+
         self.index.add_entry(entry)
 
         return entry
 
-    def read_pdf(self, path, annotations_only=False):
-        '''Read PDF at ``path``, including annotations.'''
+    def write_entry_data(self, data, entry):
+        '''Write an entry (with associated data) to the reMarkable.'''
 
-        if isinstance(path, str) or isinstance(path, Path):
-            pdf = self.get_entry_by_path(path)
-        else:
-            pdf = path
-        assert isinstance(pdf, Document)
+        if not isinstance(entry, Pdf):
+            raise RuntimeError(
+                "Writing entries other than Pdf not yet implemented")
+
+        self.fs.write_file(data, entry.uid + '.pdf')
+        self.fs.write_file(to_json(entry.metadata), entry.uid + '.metadata')
+        self.fs.write_file(to_json(entry.content), entry.uid + '.content')
+        self.fs.write_file('', entry.uid + '.pagedata')
+        self.fs.make_dir(entry.uid)
+
+        return entry
+
+    def read_entry_data(self, entry, annotations_only=False):
+        '''Read the data associated with an entry (i.e., PDF for Notebook and
+        Pdf).'''
+
+        if not (isinstance(entry, Pdf) or isinstance(entry, Notebook)):
+            raise RuntimeError(
+                "Reading entries other than Notebook or Pdf not yet "
+                "implemented")
+
+        return self.__read_as_pdf(entry, annotations_only)
+
+    def restart(self):
+        '''Restart ``xochitl`` (the GUI) on the remarkable. This is necessary
+        to see changes made to the document tree.'''
+
+        _, out, _ = self.ssh_client.exec_command(self.restart_command)
+        if out.channel.recv_exit_status() != 0:
+            logger.error("Could not restart xochitl")
+
+    def __read_as_pdf(self, entry, annotations_only):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
 
             tmp_dir = Path(tmp_dir)
-            original_pdf = (tmp_dir / pdf.uid).with_suffix('.pdf')
-            annotations_pdf = (tmp_dir / pdf.uid).with_suffix('.annotations')
-            merged_pdf = (tmp_dir / pdf.uid).with_suffix('.merged.pdf')
+            original_pdf = (tmp_dir / entry.uid).with_suffix('.pdf')
+            annotations_pdf = (tmp_dir / entry.uid).with_suffix('.annotations')
+            merged_pdf = (tmp_dir / entry.uid).with_suffix('.merged.pdf')
 
             logger.info("Creating PDF in %s", tmp_dir)
 
@@ -92,7 +123,7 @@ class RemarkableClient:
             try:
 
                 logger.info("Getting original PDF...")
-                self.fs.get_file(pdf.uid + '.pdf', original_pdf)
+                self.fs.get_file(entry.uid + '.pdf', original_pdf)
                 logger.info("Done.")
 
             except Exception as e:
@@ -103,8 +134,8 @@ class RemarkableClient:
             # read the lines for each page stored along the PDF file
             logger.info("Getting annotations...")
             page_annotations = [
-                read_lines_document(self.fs, pdf.uid, page_uid)
-                for page_uid in pdf.pages
+                read_lines_document(self.fs, entry.uid, page_uid)
+                for page_uid in entry.pages
             ]
             logger.info("Done.")
 
@@ -129,61 +160,6 @@ class RemarkableClient:
             # read and return content of merged PDF
             with open(final_pdf, mode='rb') as f:
                 return f.read()
-
-    def put_pdf(self, local, remote):
-        '''Copy PDF ``local`` to folder ``remote``.'''
-
-        uid = self.index.create_new_uid()
-        parent_folder = self.index.get_entry_by_path(remote)
-
-        meta = PDF_BASE_METADATA.copy()
-        meta['visibleName'] = os.path.splitext(os.path.basename(local))[0]
-        meta['lastModified'] = str(arrow.utcnow().timestamp() * 1000)
-        meta['parent'] = parent_folder.uid
-
-        content = PDF_BASE_CONTENT.copy()
-
-        self.fs.put_file(local, uid + '.pdf')
-        self.fs.write_file(to_json(meta), uid + '.metadata')
-        self.fs.write_file(to_json(content), uid + '.content')
-        self.fs.write_file('', uid + '.pagedata')
-        self.fs.make_dir(uid)
-
-        entry = Pdf(uid, meta, content)
-        self.index.add_entry(entry)
-
-    def get_pdf(self, pdf, filename, overwrite=False):
-        '''Copy PDF ``pdf`` to file ``filename``, including annotations.'''
-
-        # copy the original PDF to the given filename
-        self.fs.get_file(pdf.uid + '.pdf', filename, overwrite=overwrite)
-
-        # read the lines for each page stored along the PDF file
-        page_annotations = [
-            read_lines_document(self.fs, pdf.uid, page_uid)
-            for page_uid in pdf.pages
-        ]
-
-        # create a separate PDF for the annotations and merge it with the
-        # original PDF
-        logger.debug("Creating annotations PDF...")
-        create_annotations_pdf(page_annotations, filename + '.annotations')
-        logger.debug("...done.")
-
-        logger.debug("Merging PDFs...")
-        merge_pdfs(filename, filename + '.annotations', filename)
-        logger.debug("...done.")
-
-        # remove temporary annotations PDF
-        os.remove(filename + '.annotations')
-
-    def restart(self):
-        '''Restart ``xochitl`` (the GUI) on the remarkable. This is necessary
-        to see changes made to the document tree.'''
-
-        _, out, _ = self.ssh_client.exec_command(self.restart_command)
-        if out.channel.recv_exit_status() != 0:
-            logger.error("Could not restart xochitl")
 
     def __connect(self, address):
 
