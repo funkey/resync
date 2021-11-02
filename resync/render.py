@@ -5,13 +5,14 @@ from PyQt5.QtCore import Qt, QPointF
 from PyQt5.QtWidgets import \
     QGraphicsScene, QGraphicsItem, \
     QGraphicsRectItem, QGraphicsPathItem
-import logging
 from itertools import groupby
 from .constants import \
     WIDTH_PX, HEIGHT_PX, \
     TOOL_ID, HIGHLIGHTER_TOOL, ERASER_TOOL, \
     PENCIL_TOOL, MECH_PENCIL_TOOL, BRUSH_TOOL, \
     MARKER_TOOL, FINELINER_TOOL
+import logging
+import time
 
 logger = logging.getLogger(__name__)
 
