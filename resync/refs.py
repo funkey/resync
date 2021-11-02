@@ -36,6 +36,11 @@ class ReFs(fuse.Fuse):
 
         logger.info("ReFs mounted")
 
+    def fsdestroy(self):
+
+        logger.debug("Unmounting and restarting xochitl...")
+        self.client.restart()
+
     def getattr(self, path):
 
         path = Path(path)
