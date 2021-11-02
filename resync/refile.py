@@ -1,13 +1,14 @@
 from .node_stat import NodeStat
 import stat
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ReFile:
 
     def __init__(self, document, client):
-
-        print(f"ReFile::init, {document}")
 
         self.document = document
         self.client = client
@@ -23,14 +24,14 @@ class ReFile:
 
     def open(self, flags):
 
-        print(f"ReFile::open, {flags}")
+        logger.debug("ReFile::open, %s", flags)
 
         if self.size == 0 and self.document is not None:
             self._data = self.client.read_pdf(self.document)
 
     def read(self, length, offset):
 
-        print(f"ReFile::read, {length} @ {offset}")
+        logger.debug("ReFile::read, %d @ %d", length, offset)
 
         if offset < self.size:
             if offset + length > self.size:
@@ -43,7 +44,7 @@ class ReFile:
 
     def write(self, data, offset):
 
-        print(f"ReFile::write, {data} @ {offset}")
+        logger.debug("ReFile::write, %s @ %d", data, offset)
 
         length = len(data)
         diff = offset + length - self.size
@@ -60,29 +61,21 @@ class ReFile:
 
     def release(self, flags):
 
-        print(f"ReFile::release, {flags}")
+        pass
 
     def _fflush(self):
 
-        print("ReFile::_fflush")
+        pass
 
     def fsync(self, isfsyncfile):
 
-        print(f"ReFile::fsync, {isfsyncfile}")
         self._fflush()
 
     def flush(self):
 
-        print("ReFile::flush")
         self._fflush()
 
-        # TODO: should close file here?
-
     def getattr(self):
-
-        print("ReFile::getattr")
-
-        # what to return here?
 
         node_stat = NodeStat()
 
@@ -98,17 +91,9 @@ class ReFile:
 
     def ftruncate(self, length):
 
-        print(f"ReFile::ftruncate {length}")
-
         if length < self.size:
             self._data = self._data[:length]
 
     def utime(self, times):
 
-        print(f"ReFile::utime {times}")
-
         self.atime, self.mtime = times
-
-    def lock(self, cmd, owner, **kw):
-
-        print(f"ReFile::lock, {cmd}, {owner}, {kw}")
