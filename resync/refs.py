@@ -148,19 +148,6 @@ class ReFs(fuse.Fuse):
 
         return self.__get_file(entry).write(data, offset)
 
-    # def lock(self, path, *args, **kwargs):
-
-        # logger.debug("ReFs::lock %s, args=%s, kwargs=%s", path, args, kwargs)
-
-        # path = Path(path)
-
-        # if path not in self.entries:
-            # return -errno.ENOENT
-
-        # entry = self.entries[path]
-
-        # # return self.__get_file(entry).lock(flags)
-
     def release(self, path, flags):
 
         logger.debug("ReFs::release %s, %d", path, flags)
