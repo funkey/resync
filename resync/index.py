@@ -126,8 +126,12 @@ class RemarkableIndex:
 
     def __parse_entry(self, uid):
 
-        metadata = from_json(self.fs.read_file(uid + '.metadata'))
-        content = from_json(self.fs.read_file(uid + '.content'))
+        try:
+            metadata = from_json(self.fs.read_file(uid + '.metadata'))
+            content = from_json(self.fs.read_file(uid + '.content'))
+        except Exception as e:
+            logger.error("Failed to read JSON for entry with UID %s", uid)
+            raise e
 
         entry_type = metadata['type']
 
