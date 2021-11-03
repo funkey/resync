@@ -1,7 +1,8 @@
 ReSync
 ======
 
-A command line tool to synchronize PDF documents with the reMarkable tablet.
+A FUSE client for the reMarkable tablet. Shows notebooks as PDF files (which
+includes PDF files that have been annotated on the tablet).
 
 Very much under construction.
 
