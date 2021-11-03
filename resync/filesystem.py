@@ -79,6 +79,16 @@ class SshFileSystem:
         except Exception:
             return False
 
+    def remove_file(self, remote):
+
+        path = self.__to_remote_path(remote)
+        self.sftp.remove(path)
+
+    def remove_dir(self, remote):
+
+        path = self.__to_remote_path(remote)
+        self.sftp.rmdir(path)
+
     def exists(self, remote):
         '''Check if ``remote`` is a file.'''
 

@@ -24,6 +24,12 @@ class RemarkableIndex:
         parent = self.get_entry_by_uid(entry.parent_uid)
         parent.add(entry)
 
+    def remove_entry(self, entry):
+
+        parent = self.get_entry_by_uid(entry.parent_uid)
+        parent.remove(entry)
+        del self.entries[entry.uid]
+
     def get_entry_by_uid(self, uid):
         return self.entries[uid]
 

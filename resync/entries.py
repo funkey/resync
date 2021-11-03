@@ -49,6 +49,21 @@ class Folder(Entry):
         self.folders[f.name].append(f)
         self.entries[f.name].append(f)
 
+    def remove(self, e):
+
+        if isinstance(e, Folder):
+            self.remove_folder(e)
+        else:
+            self.remove_file(e)
+
+    def remove_file(self, f):
+        self.files[f.name].remove(f)
+        self.entries[f.name].remove(f)
+
+    def remove_folder(self, f):
+        self.folders[f.name].remove(f)
+        self.entries[f.name].remove(f)
+
     def __repr__(self):
 
         return f"DIR: {self.metadata['visibleName']} {self.uid}"

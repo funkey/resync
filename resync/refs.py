@@ -167,6 +167,22 @@ class ReFs(fuse.Fuse):
         # TODO: create new reMarkable Folder
         pass
 
+    def unlink(self, path):
+
+        path = Path(path)
+
+        print(f"unlink {path}")
+        if path not in self.entries:
+            return -errno.ENOENT
+
+        entry = self.entries[path]
+
+        self.client.remove_entry(entry)
+        del self.files[entry.uid]
+        del self.entries[path]
+
+        self.fs_changed = True
+
     def utime(self, path, times):
 
         path = Path(path)

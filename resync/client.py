@@ -8,7 +8,7 @@ import tempfile
 from .constants import (
     PDF_BASE_METADATA,
     PDF_BASE_CONTENT)
-from .entries import Document, Notebook, Pdf
+from .entries import Folder, Document, Notebook, Pdf
 from .filesystem import SshFileSystem
 from .index import RemarkableIndex
 from .lines import read_lines_document
@@ -101,6 +101,21 @@ class RemarkableClient:
                 "implemented")
 
         return self.__read_as_pdf(entry, annotations_only)
+
+    def remove_entry(self, entry):
+
+        if isinstance(entry, Folder):
+            raise RuntimeError("Removing folders not yet implemented")
+
+        logger.info("Deleting %s...", entry)
+
+        self.fs.remove_file(entry.uid + '.pdf')
+        self.fs.remove_file(entry.uid + '.metadata')
+        self.fs.remove_file(entry.uid + '.content')
+        self.fs.remove_file(entry.uid + '.pagedata')
+        self.fs.remove_dir(entry.uid)
+
+        self.index.remove_entry(entry)
 
     def restart(self):
         '''Restart ``xochitl`` (the GUI) on the remarkable. This is necessary
