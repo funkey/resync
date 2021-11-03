@@ -292,6 +292,12 @@ class ReFs(fuse.Fuse):
 
         # delete target, if it exists
         if target in self.entries:
+
+            target_entry = self.entries[target]
+            if isinstance(target_entry, Folder):
+                logger.error("Can not move onto a folder")
+                return -errno.EACCES
+
             self.unlink(target)
 
         # target does not exist (anymore), just a rename
@@ -346,5 +352,9 @@ class ReFs(fuse.Fuse):
             target_folder_entry,
             rename=target.with_suffix('').name)
 
-        self.entries[target] = source_entry
-        del self.entries[source]
+        # update path to Entry mapping
+        for path, entry in list(self.entries.items()):
+            if path.is_relative_to(source):
+                new_path = target / path.relative_to(source)
+                self.entries[new_path] = entry
+                del self.entries[path]
