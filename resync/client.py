@@ -1,14 +1,15 @@
 from pathlib import Path
 import arrow
 import logging
-import os
 import paramiko
 import tempfile
 
 from .constants import (
     PDF_BASE_METADATA,
-    PDF_BASE_CONTENT)
-from .entries import Folder, Document, Notebook, Pdf
+    PDF_BASE_CONTENT,
+    FOLDER_BASE_METADATA,
+    FOLDER_BASE_CONTENT)
+from .entries import Folder, Notebook, Pdf
 from .filesystem import SshFileSystem
 from .index import RemarkableIndex
 from .lines import read_lines_document
@@ -65,10 +66,29 @@ class RemarkableClient:
 
             entry = Pdf(uid, metadata, content, synced=False)
 
+        elif cls == Folder:
+
+            metadata = FOLDER_BASE_METADATA.copy()
+            metadata['visibleName'] = name
+            metadata['lastModified'] = str(arrow.utcnow().timestamp() * 1000)
+            metadata['parent'] = parent_folder.uid
+
+            content = FOLDER_BASE_CONTENT.copy()
+
+            entry = Folder(uid, metadata, content)
+
+            self.fs.write_file(
+                to_json(entry.metadata),
+                entry.uid + '.metadata')
+            self.fs.write_file(
+                to_json(entry.content),
+                entry.uid + '.content')
+
         else:
 
             raise RuntimeError(
-                "Creating entries other than Pdf not yet implemented")
+                "Creating entries other than Folder and Pdf not yet "
+                "implemented")
 
         self.index.add_entry(entry)
 

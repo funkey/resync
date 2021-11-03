@@ -200,8 +200,18 @@ class ReFs(fuse.Fuse):
 
         logger.debug("ReFs::mkdir %s %d", path, mode)
 
-        # TODO: create new reMarkable Folder
-        pass
+        path = Path(path)
+
+        if path.parent not in self.entries:
+            return -errno.ENOENT
+
+        entry = self.client.create_entry(
+            name=path.name,
+            path=path.parent,
+            cls=Folder)
+
+        self.entries[path] = entry
+        self.fs_changed = True
 
     def unlink(self, path):
 

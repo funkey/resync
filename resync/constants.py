@@ -53,6 +53,17 @@ PDF_BASE_CONTENT = {
       "m31": 0, "m32": 0, "m33": 1
     }
 }
+FOLDER_BASE_METADATA = {
+    'deleted': False,
+    'metadatamodified': True,
+    'modified': True,
+    'parent': '',
+    'pinned': False,
+    'synced': False,
+    'type': 'CollectionType',
+    'version': 1
+}
+FOLDER_BASE_CONTENT = {}
 
 WIDTH_PX = 1404
 HEIGHT_PX = 1872
