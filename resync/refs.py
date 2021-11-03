@@ -136,7 +136,7 @@ class ReFs(fuse.Fuse):
 
     def write(self, path, data, offset):
 
-        logger.debug("ReFs::write %s, %d bytes @ %d", len(data), offset)
+        logger.debug("ReFs::write %s, %d bytes @ %d", path, len(data), offset)
 
         path = Path(path)
 
