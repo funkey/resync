@@ -34,12 +34,17 @@ class ReFs(fuse.Fuse):
         # map from Entry UID to ReFile, lazily populated as needed
         self.files = {}
 
+        self.fs_changed = False
+
         logger.info("ReFs mounted")
 
     def fsdestroy(self):
 
-        logger.debug("Unmounting and restarting xochitl...")
-        self.client.restart()
+        logger.debug("Unmounting...")
+
+        if self.fs_changed:
+            logger.debug("Changes made, restarting xochitl...")
+            self.client.restart()
 
     def getattr(self, path):
 
@@ -127,6 +132,7 @@ class ReFs(fuse.Fuse):
             return -errno.ENOENT
 
         entry = self.entries[path]
+        self.fs_changed = True
 
         return self.__get_file(entry).write(data, offset)
 
@@ -159,6 +165,7 @@ class ReFs(fuse.Fuse):
 
         self.entries[path] = entry
         self.files[entry.uid] = refile
+        self.fs_changed = True
 
         print(f"  created empty PDF document {entry.uid}")
 
@@ -223,7 +230,9 @@ class ReFs(fuse.Fuse):
 
         entry = self.entries[path]
 
-        self.__get_file(entry).truncate(length)
+        self.fs_changed = True
+
+        return self.__get_file(entry).truncate(length)
 
     def rename(self, source, target):
 
@@ -231,6 +240,8 @@ class ReFs(fuse.Fuse):
         target = Path(target)
 
         # TODO: move entry
+
+        self.fs_changed = True
 
     def __get_entries(self, path):
         '''Recursively get all `class:Entry`s by their path.'''
