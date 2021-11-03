@@ -122,6 +122,25 @@ class RemarkableClient:
 
         return self.__read_as_pdf(entry, annotations_only)
 
+    def move_entry(self, entry, folder, rename=None):
+
+        assert isinstance(folder, Folder)
+
+        # remove entry from index
+        self.index.remove_entry(entry)
+
+        # update entry metadata and store on reMarkable
+        entry.metadata['parent'] = folder.uid
+        if rename is not None:
+            entry.metadata['visibleName'] = rename
+        self.fs.write_file(
+            to_json(entry.metadata),
+            entry.uid + '.metadata',
+            overwrite=True)
+
+        # add entry to index again
+        self.index.add_entry(entry)
+
     def remove_entry(self, entry):
 
         if isinstance(entry, Folder):

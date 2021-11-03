@@ -205,10 +205,14 @@ class ReFs(fuse.Fuse):
         if path.parent not in self.entries:
             return -errno.ENOENT
 
-        entry = self.client.create_entry(
-            name=path.name,
-            path=path.parent,
-            cls=Folder)
+        try:
+            entry = self.client.create_entry(
+                name=path.name,
+                path=path.parent,
+                cls=Folder)
+        except Exception as e:
+            logger.error("ReFs::mkdir got %s", e)
+            raise e
 
         self.entries[path] = entry
         self.fs_changed = True
@@ -286,10 +290,15 @@ class ReFs(fuse.Fuse):
         source = Path(source)
         target = Path(target)
 
-        # TODO: move entry
-        logger.error("ReFs::rename not yet implemented")
+        # delete target, if it exists
+        if target in self.entries:
+            self.unlink(target)
 
-        self.fs_changed = False
+        # target does not exist (anymore), just a rename
+        self.__rename(source, target)
+
+        self.fs_changed = True
+        logger.debug("Moved %s to %s", source, target)
 
     def __get_entries(self, path):
         '''Recursively get all `class:Entry`s by their path.'''
@@ -326,3 +335,16 @@ class ReFs(fuse.Fuse):
 
         # everything that is not a folder can be read as a PDF
         return entry.name + '.pdf'
+
+    def __rename(self, source, target):
+
+        source_entry = self.entries[source]
+        target_folder_entry = self.entries[target.parent]
+
+        self.client.move_entry(
+            source_entry,
+            target_folder_entry,
+            rename=target.with_suffix('').name)
+
+        self.entries[target] = source_entry
+        del self.entries[source]
