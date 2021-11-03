@@ -80,7 +80,13 @@ class ReFile:
         if self.data_changed:
 
             logger.debug("  data changed, writing to reMarkable...")
-            self.client.write_entry_data(self._data, self.entry)
+            try:
+                self.client.write_entry_data(self._data, self.entry)
+            except Exception as e:
+                logger.error("  Failed: %s", e)
+                raise e
+            self.data_changed = False
+            logger.debug("  ...done.")
 
     def _fflush(self):
 
