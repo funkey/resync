@@ -48,6 +48,8 @@ class ReFs(fuse.Fuse):
 
     def getattr(self, path):
 
+        logger.debug("ReFs::getattr %s", path)
+
         path = Path(path)
 
         if path not in self.entries:
@@ -69,6 +71,8 @@ class ReFs(fuse.Fuse):
 
     def readdir(self, path, offset):
 
+        logger.debug("ReFs::readdir %s, %d", path, offset)
+
         path = Path(path)
 
         # part of every directory
@@ -83,6 +87,8 @@ class ReFs(fuse.Fuse):
                 yield fuse.Direntry(self.__get_node_name(child_entry))
 
     def access(self, path, mode):
+
+        logger.debug("ReFs::access %s, %d", path, mode)
 
         path = Path(path)
 
@@ -104,6 +110,8 @@ class ReFs(fuse.Fuse):
 
     def open(self, path, flags):
 
+        logger.debug("ReFs::open %s, %d", path, flags)
+
         path = Path(path)
 
         if path not in self.entries:
@@ -114,6 +122,8 @@ class ReFs(fuse.Fuse):
         return self.__get_file(entry).open(flags)
 
     def read(self, path, length, offset):
+
+        logger.debug("ReFs::read %s, %d bytes @ %d", path, length, offset)
 
         path = Path(path)
 
@@ -126,6 +136,8 @@ class ReFs(fuse.Fuse):
 
     def write(self, path, data, offset):
 
+        logger.debug("ReFs::write %s, %d bytes @ %d", len(data), offset)
+
         path = Path(path)
 
         if path not in self.entries:
@@ -136,11 +148,25 @@ class ReFs(fuse.Fuse):
 
         return self.__get_file(entry).write(data, offset)
 
+    # def lock(self, path, *args, **kwargs):
+
+        # logger.debug("ReFs::lock %s, args=%s, kwargs=%s", path, args, kwargs)
+
+        # path = Path(path)
+
+        # if path not in self.entries:
+            # return -errno.ENOENT
+
+        # entry = self.entries[path]
+
+        # # return self.__get_file(entry).lock(flags)
+
     def release(self, path, flags):
+
+        logger.debug("ReFs::release %s, %d", path, flags)
 
         path = Path(path)
 
-        print(f"release {path} {flags}")
         if path not in self.entries:
             return -errno.ENOENT
 
@@ -150,9 +176,10 @@ class ReFs(fuse.Fuse):
 
     def mknod(self, path, mode, dev):
 
+        logger.debug("ReFs::mknod %s, %d, %s", path, mode, dev)
+
         path = Path(path)
 
-        print(f"mknod {path}")
         if path.suffix != '.pdf':
             logger.error("Only creation of PDF files allowed")
             return -errno.EACCES
@@ -167,14 +194,18 @@ class ReFs(fuse.Fuse):
         self.files[entry.uid] = refile
         self.fs_changed = True
 
-        print(f"  created empty PDF document {entry.uid}")
+        logger.info("ReFs::mknod: created empty PDF document %s", entry)
 
     def mkdir(self, path, mode):
+
+        logger.debug("ReFs::mkdir %s %d", path, mode)
 
         # TODO: create new reMarkable Folder
         pass
 
     def unlink(self, path):
+
+        logger.debug("ReFs::unlink %s", path)
 
         path = Path(path)
 
@@ -191,6 +222,8 @@ class ReFs(fuse.Fuse):
         self.fs_changed = True
 
     def utime(self, path, times):
+
+        logger.debug("ReFs::utime %s %s", path, times)
 
         path = Path(path)
 
@@ -223,6 +256,8 @@ class ReFs(fuse.Fuse):
 
     def truncate(self, path, length):
 
+        logger.debug("ReFs::truncate %s to %d", path, length)
+
         path = Path(path)
 
         if path not in self.entries:
@@ -236,12 +271,15 @@ class ReFs(fuse.Fuse):
 
     def rename(self, source, target):
 
+        logger.debug("ReFs::rename %s to %s", source, target)
+
         source = Path(source)
         target = Path(target)
 
         # TODO: move entry
+        logger.error("ReFs::rename not yet implemented")
 
-        self.fs_changed = True
+        self.fs_changed = False
 
     def __get_entries(self, path):
         '''Recursively get all `class:Entry`s by their path.'''
@@ -257,6 +295,7 @@ class ReFs(fuse.Fuse):
         return entries
 
     def __get_file(self, entry):
+        '''Get the ReFile for an Entry. Create it, if it doesn't exist yet.'''
 
         if entry.uid in self.files:
             return self.files[entry.uid]
@@ -270,6 +309,7 @@ class ReFs(fuse.Fuse):
         return refile
 
     def __get_node_name(self, entry):
+        '''Get the visible filename of an entry.'''
 
         if isinstance(entry, Folder):
             return entry.name
