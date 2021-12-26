@@ -341,7 +341,7 @@ class ReFs(fuse.Fuse):
 
         # update path to Entry mapping
         for path, entry in list(self.entries.items()):
-            if path.is_relative_to(source):
+            if str(path).startswith(str(source)):
                 new_path = target / path.relative_to(source)
                 self.entries[new_path] = entry
                 del self.entries[path]
