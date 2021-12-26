@@ -222,6 +222,31 @@ class ReFs(fuse.Fuse):
 
         self.fs_changed = True
 
+    def rmdir(self, path):
+
+        logger.debug("ReFs::rmdir %s", path)
+
+        path = Path(path)
+
+        print(f"rmdir {path}")
+        if path not in self.entries:
+            return -errno.ENOENT
+
+        directory = self.entries[path]
+        assert isinstance(directory, Folder)
+
+        num_children = 0
+        for child_entries in directory.entries.values():
+            num_children += len(child_entries)
+        empty = num_children == 0
+        if not empty:
+            return -errno.ENOTEMPTY
+
+        self.client.remove_entry(directory)
+        del self.entries[path]
+
+        self.fs_changed = True
+
     def utime(self, path, times):
 
         logger.debug("ReFs::utime %s %s", path, times)

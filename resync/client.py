@@ -143,16 +143,21 @@ class RemarkableClient:
 
     def remove_entry(self, entry):
 
-        if isinstance(entry, Folder):
-            raise RuntimeError("Removing folders not yet implemented")
-
         logger.info("Deleting %s...", entry)
 
-        self.fs.remove_file(entry.uid + '.pdf')
+        if not isinstance(entry, Folder) and not isinstance(entry, Pdf):
+            raise RuntimeError(
+                "Deletion of %s not yet implemented" % type(entry))
+
+        # generic delete for all entries
         self.fs.remove_file(entry.uid + '.metadata')
         self.fs.remove_file(entry.uid + '.content')
-        self.fs.remove_file(entry.uid + '.pagedata')
-        self.fs.remove_dir(entry.uid)
+
+        if isinstance(entry, Pdf):
+
+            self.fs.remove_file(entry.uid + '.pdf')
+            self.fs.remove_file(entry.uid + '.pagedata')
+            self.fs.remove_dir(entry.uid)
 
         self.index.remove_entry(entry)
 
