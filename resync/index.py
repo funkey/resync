@@ -112,7 +112,14 @@ class RemarkableIndex:
             if parent_uid is ROOT_ID:
                 parent = root_folder
             else:
-                parent = entries[parent_uid]
+                try:
+                    parent = entries[parent_uid]
+                except KeyError:
+                    logger.error(
+                        "Parent %s of entry %s does not exist (or is deleted)",
+                        parent_uid,
+                        entry)
+                    continue
 
             if isinstance(entry, Folder):
                 parent.add_folder(entry)
