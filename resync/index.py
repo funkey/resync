@@ -119,6 +119,9 @@ class RemarkableIndex:
             else:
                 parent.add_file(entry)
 
+        # remember the root folder as well
+        entries[ROOT_ID] = root_folder
+
         self.root_folder = root_folder
         self.entries = entries
 
