@@ -68,6 +68,7 @@ class Folder(Entry):
 
         return f"DIR: {self.metadata['visibleName']} {self.uid}"
 
+
 class Document(Entry):
 
     def __init__(self, uid, metadata, content, synced=True):
@@ -78,6 +79,7 @@ class Document(Entry):
             self.pages = content['pages']
         else:
             self.pages = []
+
 
 class Notebook(Document):
 
