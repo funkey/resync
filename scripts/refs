@@ -7,10 +7,6 @@ import logging
 import os
 import sys
 
-logging.basicConfig(level=logging.INFO)
-logging.getLogger('resync.refs').setLevel(logging.DEBUG)
-logging.getLogger('resync.refile').setLevel(logging.DEBUG)
-
 parser = argparse.ArgumentParser()
 parser.add_argument(
     'remarkable_address',
@@ -22,11 +18,20 @@ parser.add_argument(
     'mount_dir',
     type=str,
     help="The directory to mount the reMarkable to.")
+parser.add_argument(
+    '-v', '--verbose',
+    action='store_true',
+    help="Enable debug logging.")
 
 
 if __name__ == '__main__':
 
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO)
+    if args.verbose:
+        logging.getLogger('resync.refs').setLevel(logging.DEBUG)
+        logging.getLogger('resync.refile').setLevel(logging.DEBUG)
 
     uid = os.getuid()
     gid = os.getgid()
