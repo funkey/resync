@@ -1,14 +1,10 @@
+from .constants import WIDTH_PX, HEIGHT_PX
+from .render import render_lines
 from PyPDF2 import PdfFileReader, PdfFileWriter
 from PyPDF2.pdf import PageObject
-from PyQt5.QtCore import QSizeF
-from PyQt5.QtGui import QPainter
-from PyQt5.QtPrintSupport import QPrinter
-from PyQt5.QtWidgets import QApplication
 from itertools import chain
 import logging
-
-from .constants import WIDTH_MM, HEIGHT_MM
-from .render import lines_to_scene
+import skia
 
 logger = logging.getLogger(__name__)
 
@@ -27,48 +23,13 @@ def create_annotations_pdf(page_annotations, filename):
             The filename of the PDF to create.
     '''
 
-    # both lines_to_scene and create_pdf use PyQt5 classes that require a
-    # QApplication context, so here it is
-    _ = QApplication([])
+    stream = skia.FILEWStream(filename)
+    metadata = skia.PDF.Metadata()
 
-    logger.debug("Converting lines to scenes...")
-    scenes = [
-        lines_to_scene(lines)
-        for lines in page_annotations
-    ]
-    logger.debug("...done.")
-
-    logger.debug("Creating PDF %s from scenes...", filename)
-    create_pdf(scenes, filename)
-    logger.debug("...done.")
-
-
-def create_pdf(scenes, filename):
-    '''Create a PDF from "scenes" (i.e., from line annotations).
-
-    Args:
-
-        scenes: list of ``QGraphicsScene``, one per page
-
-        filename: A local filename to store the generated PDF.
-    '''
-
-    printer = QPrinter(QPrinter.HighResolution)
-    printer.setOutputFormat(QPrinter.PdfFormat)
-    printer.setOutputFileName(str(filename))
-    printer.setPaperSize(QSizeF(HEIGHT_MM, WIDTH_MM), QPrinter.Millimeter)
-    printer.setPageMargins(0, 0, 0, 0, QPrinter.Millimeter)
-    painter = QPainter()
-    painter.begin(printer)
-    try:
-        for i in range(len(scenes)):
-            if i > 0:
-                printer.newPage()
-            scenes[i].render(painter)
-    except Exception as e:
-        raise e
-    finally:
-        painter.end()
+    with skia.PDF.MakeDocument(stream, metadata) as doc:
+        for lines in page_annotations:
+            with doc.page(WIDTH_PX, HEIGHT_PX) as canvas:
+                render_lines(lines, canvas)
 
 
 def merge_pdfs(pdf1, pdf2, target, ranges=None, rotate=0):

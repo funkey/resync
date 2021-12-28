@@ -1,5 +1,4 @@
+PyPDF2
 arrow
 paramiko
-PyPDF2
-PyQt5
-simplification
+skia
