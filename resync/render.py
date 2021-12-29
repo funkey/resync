@@ -1,6 +1,7 @@
 import skia
 from .constants import \
     ERASE_AREA_TOOL, \
+    FINELINER_TOOL, \
     HIGHLIGHTER_TOOL, \
     PENCIL_TOOL, \
     TOOL_ID
@@ -31,7 +32,9 @@ def render_layer(layer, canvas):
         if tool == ERASE_AREA_TOOL:
             continue
         elif tool == HIGHLIGHTER_TOOL:
-            render_stroke_circles(stroke, canvas, 0.01)
+            render_stroke_area(stroke, canvas, 0.3)
+        elif tool == FINELINER_TOOL:
+            render_stroke_area(stroke, canvas, 0.8)
         elif tool == PENCIL_TOOL:
             render_stroke_circles(stroke, canvas, 0.02)
         else:
@@ -48,3 +51,18 @@ def render_stroke_circles(stroke, canvas, opacity=1.0):
 
     for segment in stroke.segments:
         canvas.drawCircle(segment.x, segment.y, segment.width / 2, paint)
+
+
+def render_stroke_area(stroke, canvas, opacity=1.0):
+
+    paint = skia.Paint()
+    paint.setStyle(skia.Paint.kFill_Style)
+    paint.setColor(colors[stroke.color])
+    paint.setAlpha(int(opacity * 255))
+    paint.setStrokeWidth(0)
+
+    path = skia.Path()
+    for segment in stroke.segments:
+        path.addCircle(segment.x, segment.y, segment.width / 2)
+
+    canvas.drawPath(path, paint)
