@@ -54,6 +54,7 @@ def find_remarkable():
     '''
 
     for candidate in enumerate_candidates():
+        logger.debug("Trying to connect to %s", candidate)
         if is_remarkable(candidate):
             logger.debug("Found remarkable with address %s", candidate)
             return candidate
