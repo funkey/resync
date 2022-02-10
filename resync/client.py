@@ -131,8 +131,11 @@ class RemarkableClient:
 
         # update entry metadata and store on reMarkable
         entry.metadata['parent'] = folder.uid
+        entry.metadata['metadatamodified'] = True
+        entry.metadata['lastModified'] = str(arrow.utcnow().timestamp() * 1000)
         if rename is not None:
             entry.metadata['visibleName'] = rename
+
         self.fs.write_file(
             to_json(entry.metadata),
             entry.uid + '.metadata',
