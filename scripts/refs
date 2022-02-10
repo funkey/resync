@@ -30,8 +30,10 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=logging.INFO)
     if args.verbose:
-        logging.getLogger('resync.refs').setLevel(logging.DEBUG)
+        logging.getLogger('resync.client').setLevel(logging.DEBUG)
+        logging.getLogger('resync.find').setLevel(logging.DEBUG)
         logging.getLogger('resync.refile').setLevel(logging.DEBUG)
+        logging.getLogger('resync.refs').setLevel(logging.DEBUG)
 
     uid = os.getuid()
     gid = os.getgid()
