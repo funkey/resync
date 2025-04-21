@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "refs"
+description = "FUSE-based reMarkable file system"
+readme = "README.md"
+license = { text = "GPL-3.0" }
+authors = [
+    { name = 'Jan Funke', email = 'funkej@janelia.hhmi.org' },
+]
+dynamic = ["version"]
+dependencies = ["arrow", "paramiko"]
+scripts = { refs = "refs:main" }
+
+[project.optional-dependencies]
+dev = ["pre-commit", "pytest", "pytest-cov", "ruff", "twine", "build"]
+test = ["pytest", "pytest-cov"]
+
+[project.urls]
+homepage = "https://github.com/funkey/refs"
+
+[tool.hatch.version]
+path = "refs/__init__.py"
+
+[tool.ruff]
+target-version = "py38"
+src = ["refs"]
+
+[tool.ruff.lint]
+select = [
+    "F",   # pyflakes
+    "E",   # pycodestyle
+    "I",   # isort
+    "UP",  # pyupgrade 
+    "RUF", # ruff specific rules
+    "D",
+]
+ignore = [
+    "D100", # Missing docstring in public mod
+    "D104", # Missing docstring in public package
+    "D105", # Missing docstring in magic method
+    "D107", # Missing docstring in `__init__`
+    "D102", # Missing docstring in public method
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
