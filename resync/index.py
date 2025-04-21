@@ -3,7 +3,8 @@ import uuid
 from .constants import (
     FOLDER_TYPE,
     DOCUMENT_TYPE,
-    ROOT_ID)
+    ROOT_ID,
+    TRASH_ID)
 from .entries import Folder, Notebook, Pdf, EBook
 from .utils import from_json
 import logging
@@ -90,19 +91,24 @@ class RemarkableIndex:
             for uid in uids
         }
 
-        # ignore deleted entries
-        entries = {
-            uid: entry
-            for uid, entry in entries.items()
-            if not entry.deleted
-        }
-
         # create a root folder
         root_folder = Folder(
-            '',
+            ROOT_ID,
             {
                 'visibleName': '/',
                 'parent': None,
+                'deleted': False,
+                'type': FOLDER_TYPE
+            },
+            {}
+        )
+
+        # create a trash folder
+        trash_folder = Folder(
+            TRASH_ID,
+            {
+                'visibleName': '.trash',
+                'parent': ROOT_ID,
                 'deleted': False,
                 'type': FOLDER_TYPE
             },
@@ -114,8 +120,11 @@ class RemarkableIndex:
 
             parent_uid = entry.parent_uid
 
-            if parent_uid is ROOT_ID:
+            if parent_uid == ROOT_ID:
                 parent = root_folder
+            elif parent_uid == TRASH_ID:
+                logger.info("Entry %s found in trash", entry)
+                parent = trash_folder
             else:
                 try:
                     parent = entries[parent_uid]
@@ -131,10 +140,14 @@ class RemarkableIndex:
             else:
                 parent.add_file(entry)
 
-        # remember the root folder as well
+        # remember the root and trash folder as well
         entries[ROOT_ID] = root_folder
+        entries[TRASH_ID] = trash_folder
+
+        root_folder.add_folder(trash_folder)
 
         self.root_folder = root_folder
+        self.trash_folder = trash_folder
         self.entries = entries
 
         logger.info("...done.")

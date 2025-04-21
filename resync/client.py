@@ -8,7 +8,8 @@ from .constants import (
     PDF_BASE_METADATA,
     PDF_BASE_CONTENT,
     FOLDER_BASE_METADATA,
-    FOLDER_BASE_CONTENT)
+    FOLDER_BASE_CONTENT,
+    TRASH_ID)
 from .entries import Folder, Notebook, Pdf
 from .filesystem import SshFileSystem
 from .index import RemarkableIndex
@@ -146,23 +147,27 @@ class RemarkableClient:
 
     def remove_entry(self, entry):
 
-        logger.info("Deleting %s...", entry)
+        logger.info("Moving %s to trash...", entry)
 
         if not isinstance(entry, Folder) and not isinstance(entry, Pdf):
             raise RuntimeError(
                 "Deletion of %s not yet implemented" % type(entry))
 
-        # generic delete for all entries
-        self.fs.remove_file(entry.uid + '.metadata')
-        self.fs.remove_file(entry.uid + '.content')
-
-        if isinstance(entry, Pdf):
-
-            self.fs.remove_file(entry.uid + '.pdf')
-            self.fs.remove_file(entry.uid + '.pagedata')
-            self.fs.remove_dir(entry.uid)
-
+        # remove entry from index
         self.index.remove_entry(entry)
+
+        # update entry metadata and store on reMarkable
+        entry.metadata['parent'] = TRASH_ID
+        entry.metadata['metadatamodified'] = True
+        entry.metadata['lastModified'] = str(arrow.utcnow().timestamp() * 1000)
+
+        self.fs.write_file(
+            to_json(entry.metadata),
+            entry.uid + '.metadata',
+            overwrite=True)
+
+        # add entry to index again
+        self.index.add_entry(entry)
 
     def restart(self):
         '''Restart ``xochitl`` (the GUI) on the remarkable. This is necessary
