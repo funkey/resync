@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 from .refs import ReFs
-from .refs import find_remarkable
+from .find import find_remarkable
 import argparse
-import fuse
+import llfuse
 import logging
 import os
 import sys
@@ -54,12 +54,7 @@ def main():
     # prepare sys.argv for FUSE
     sys.argv = [sys.argv[0], "-f", "-o", f"uid={uid}", "-o", f"gid={gid}", mount_dir]
 
-    server = ReFs(
-        remarkable_address,
-        version="%prog " + fuse.__version__,
-        usage=fuse.Fuse.fusage,
-        dash_s_do="setsingle",
-    )
+    server = ReFs(remarkable_address)
 
     server.parse(errex=1)
     server.main()
