@@ -19,10 +19,10 @@ DOCUMENT = NOTEBOOK | PDF | EPUB
 DELETED = (DOCUMENT | FOLDER) << 4
 NOT_DELETED = DELETED >> 4
 NOTHING = 0
-ANYTHING = 0xff
+ANYTHING = 0xFF
 
-ROOT_ID = ''
-TRASH_ID = 'trash'
+ROOT_ID = ""
+TRASH_ID = "trash"
 
 PDF_BASE_METADATA = {
     "deleted": False,
@@ -48,20 +48,26 @@ PDF_BASE_CONTENT = {
     "textAlignment": "left",
     "textScale": 1,
     "transform": {
-      "m11": 1, "m12": 0, "m13": 0,
-      "m21": 0, "m22": 1, "m23": 0,
-      "m31": 0, "m32": 0, "m33": 1
-    }
+        "m11": 1,
+        "m12": 0,
+        "m13": 0,
+        "m21": 0,
+        "m22": 1,
+        "m23": 0,
+        "m31": 0,
+        "m32": 0,
+        "m33": 1,
+    },
 }
 FOLDER_BASE_METADATA = {
-    'deleted': False,
-    'metadatamodified': True,
-    'modified': True,
-    'parent': '',
-    'pinned': False,
-    'synced': False,
-    'type': 'CollectionType',
-    'version': 1
+    "deleted": False,
+    "metadatamodified": True,
+    "modified": True,
+    "parent": "",
+    "pinned": False,
+    "synced": False,
+    "type": "CollectionType",
+    "version": 1,
 }
 FOLDER_BASE_CONTENT = {}
 
@@ -84,23 +90,23 @@ CALLIGRAPHY_TOOL = 21
 UNKNOWN_TOOL = None
 
 TOOL_ID = {
-   0: BRUSH_TOOL,
-   1: PENCIL_TOOL,
-   2: BALLPOINT_TOOL,
-   3: MARKER_TOOL,
-   4: FINELINER_TOOL,
-   5: HIGHLIGHTER_TOOL,
-   6: ERASER_TOOL,
-   7: MECH_PENCIL_TOOL,
-   8: ERASE_AREA_TOOL,
-   9: CALLIGRAPHY_TOOL,  # guesswork
-   12: BRUSH_TOOL,
-   13: MECH_PENCIL_TOOL,
-   14: PENCIL_TOOL,
-   15: BALLPOINT_TOOL,
-   16: MARKER_TOOL,
-   17: FINELINER_TOOL,
-   18: HIGHLIGHTER_TOOL,
-   19: ERASER_TOOL,
-   21: CALLIGRAPHY_TOOL,
+    0: BRUSH_TOOL,
+    1: PENCIL_TOOL,
+    2: BALLPOINT_TOOL,
+    3: MARKER_TOOL,
+    4: FINELINER_TOOL,
+    5: HIGHLIGHTER_TOOL,
+    6: ERASER_TOOL,
+    7: MECH_PENCIL_TOOL,
+    8: ERASE_AREA_TOOL,
+    9: CALLIGRAPHY_TOOL,  # guesswork
+    12: BRUSH_TOOL,
+    13: MECH_PENCIL_TOOL,
+    14: PENCIL_TOOL,
+    15: BALLPOINT_TOOL,
+    16: MARKER_TOOL,
+    17: FINELINER_TOOL,
+    18: HIGHLIGHTER_TOOL,
+    19: ERASER_TOOL,
+    21: CALLIGRAPHY_TOOL,
 }

@@ -6,18 +6,17 @@ logger = logging.getLogger(__name__)
 
 
 class SshFileSystem:
-    '''An SSH client to interact with the remakable filesystem.'''
+    """An SSH client to interact with the remakable filesystem."""
 
     def __init__(self, ssh_client, root_dir=None):
-
         self.sftp = ssh_client.open_sftp()
 
         if root_dir is None:
-            root_dir = '/'
+            root_dir = "/"
         self.root_dir = root_dir
 
     def put_file(self, local, remote, overwrite=False):
-        '''Copy file ``local`` to ``remote`` (relative to document root)'''
+        """Copy file ``local`` to ``remote`` (relative to document root)"""
 
         path = self.__to_remote_path(remote)
 
@@ -28,7 +27,7 @@ class SshFileSystem:
         return False
 
     def get_file(self, remote, local, overwrite=False):
-        '''Copy file ``remote`` (relative to document root) to ``local``'''
+        """Copy file ``remote`` (relative to document root) to ``local``"""
 
         path = self.__to_remote_path(remote)
 
@@ -39,26 +38,26 @@ class SshFileSystem:
         return False
 
     def read_file(self, remote, binary=False):
-        '''Read file ``remote`` (relative to document root).'''
+        """Read file ``remote`` (relative to document root)."""
 
         path = self.__to_remote_path(remote)
 
-        content = "" if not binary else b''
-        mode = 'r' if not binary else 'rb'
+        content = "" if not binary else b""
+        mode = "r" if not binary else "rb"
         for line in self.sftp.open(path, mode):
             content += line
 
         return content
 
     def write_file(self, content, remote, overwrite=False):
-        '''Create file ``remote`` (relative to document root) with the given
-        content.'''
+        """Create file ``remote`` (relative to document root) with the given
+        content."""
 
         path = self.__to_remote_path(remote)
 
         if overwrite or not self.__is_file(path):
             try:
-                with self.sftp.open(path, 'w') as f:
+                with self.sftp.open(path, "w") as f:
                     f.write(content)
             except Exception:
                 logger.error("Could not open %s for writing", path)
@@ -69,7 +68,7 @@ class SshFileSystem:
         return False
 
     def make_dir(self, remote):
-        '''Create the directory ``remote``.'''
+        """Create the directory ``remote``."""
 
         path = self.__to_remote_path(remote)
 
@@ -80,33 +79,30 @@ class SshFileSystem:
             return False
 
     def remove_file(self, remote):
-
         path = self.__to_remote_path(remote)
         self.sftp.remove(path)
 
     def remove_dir(self, remote):
-
         path = self.__to_remote_path(remote)
         self.sftp.rmdir(path)
 
     def exists(self, remote):
-        '''Check if ``remote`` is a file.'''
+        """Check if ``remote`` is a file."""
 
         path = self.__to_remote_path(remote)
 
         return self.__is_file(path)
 
     def list(self, remote):
-        '''List all entries in ``remote``.'''
+        """List all entries in ``remote``."""
 
         path = self.__to_remote_path(remote)
         return list(self.sftp.listdir(path))
 
     def __to_remote_path(self, path):
-        return os.path.join(self.root_dir, path.lstrip('/'))
+        return os.path.join(self.root_dir, path.lstrip("/"))
 
     def __is_file(self, path):
-
         try:
             p = self.sftp.stat(path)
         except Exception:
@@ -114,7 +110,6 @@ class SshFileSystem:
         return S_ISREG(p.st_mode) != 0
 
     def __is_dir(self, path):
-
         try:
             p = self.sftp.stat(path)
         except Exception:
