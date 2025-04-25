@@ -11,7 +11,7 @@ authors = [
     { name = 'Jan Funke', email = 'funkej@janelia.hhmi.org' },
 ]
 dynamic = ["version"]
-dependencies = ["arrow", "paramiko"]
+dependencies = ["arrow", "paramiko", "llfuse"]
 scripts = { refs = "refs:main" }
 
 [project.optional-dependencies]
