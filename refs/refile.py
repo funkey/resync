@@ -1,9 +1,7 @@
 import logging
-import os
-import stat
 import time
 
-from llfuse import EntryAttributes
+from .entries import Pdf, Notebook
 
 logger = logging.getLogger(__name__)
 
@@ -72,41 +70,35 @@ class ReFile:
 
         return length
 
-    def release(self, flags):
-        logger.debug("ReFile::release")
+    def close(self):
+        logger.debug("[ReFile::close]")
 
         if self.data_changed:
             logger.debug("  data changed, writing to reMarkable...")
-            try:
-                self.client.write_document_data(self._data, self.document)
-            except Exception as e:
-                logger.error("  Failed: %s", e)
-                raise e
+            self.write_data()
             self.data_changed = False
             logger.debug("  ...done.")
 
-    def _fflush(self):
-        # TODO: needed?
-        pass
+    def read_data(self, annotations_only=False):
+        """Read the data associated with a document."""
+        if not (isinstance(self.document, Pdf) or isinstance(self.document, Notebook)):
+            raise RuntimeError(
+                "Reading entries other than Notebook or Pdf not yet implemented"
+            )
 
-    def fsync(self, isfsyncfile):
-        self._fflush()
+        self._data = self.__read_as_pdf(annotations_only)
 
-    def flush(self):
-        self._fflush()
+    def write_data(self):
+        """Write a document (with associated data) to the reMarkable."""
+        if not isinstance(self.document, Pdf):
+            raise NotImplementedError(
+                "Writing entries other than Pdf not yet implemented"
+            )
 
-    def getattr(self):
-        attrs = EntryAttributes()
-
-        # default virtual file permissions
-        attrs.st_mode = stat.S_IFREG | 0o666  # write by everyone
-        attrs.st_nlink = 1
-        attrs.st_size = self.size
-        attrs.st_atime_ns = self.atime
-        attrs.st_mtime_ns = self.mtime
-        attrs.st_ctime_ns = self.ctime
-
-        return attrs
+        self.fs.write_file(self._data, self.document.uid + ".pdf")
+        self.fs.write_file("", self.document.uid + ".pagedata")
+        self.fs.make_dir(self.document.uid)
+        self.document.sync(self.fs)
 
     def truncate(self, length):
         if length < self.size:
@@ -114,3 +106,7 @@ class ReFile:
 
     def utime(self, times):
         self.atime, self.mtime = times
+
+    def __read_as_pdf(self, annotations_only):
+        # TODO: actually create the PDF data and return it here
+        return b"Hello, world!"
