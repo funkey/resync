@@ -26,19 +26,19 @@ class ReFile:
 
     @property
     def size(self):
+        self.load()
         return len(self._data)
 
-    def open(self):
-        logger.debug("[ReFile::open]")
+    def load(self):
+        """Load the data for this document."""
+        logger.debug("[ReFile::load]")
 
         # unsynced entries do not have data yet
         if not self.document.synced:
+            logger.debug("[ReFile::load] document out-of-sync, will not load")
             return
 
-        # synced document, but no data: create PDF data
-        if self.size == 0:
-            self._data = bytearray(self.client.read_document_data(self.document))
-            self.data_changed = False
+        self.read_data()
 
     def read(self, length=None, offset=0):
         if length is None:
@@ -87,6 +87,7 @@ class ReFile:
             )
 
         self._data = self.__read_as_pdf(annotations_only)
+        self.data_changed = False
 
     def write_data(self):
         """Write a document (with associated data) to the reMarkable."""
