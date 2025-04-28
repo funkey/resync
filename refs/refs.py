@@ -1,5 +1,6 @@
 from .client import RemarkableClient
 from .entries import Folder, Pdf
+from .memfile import MemFile
 from pathlib import Path
 import errno
 import llfuse
@@ -27,6 +28,9 @@ class ReFs(llfuse.Operations):
         self.entries_by_inode = {}
         self.inodes_by_entry = {}
 
+        # map from entries to memory files
+        self.files = {}
+
         self.next_inode = llfuse.ROOT_INODE
         self.__init_maps(self.store.root)
 
@@ -47,8 +51,6 @@ class ReFs(llfuse.Operations):
 
     def destroy(self):
         logger.debug("Unmounting...")
-
-        self.store.sync()
 
         if self.fs_changed:
             logger.debug("Changes made, restarting xochitl...")
@@ -102,7 +104,10 @@ class ReFs(llfuse.Operations):
             attrs.st_mode = stat.S_IFDIR | 0o755
             attrs.st_nlink = 2
         else:
-            attrs.st_size = self.store.get_file(entry).size
+            if entry in self.files:
+                attrs.st_size = self.files[entry].size
+            else:
+                attrs.st_size = 1912  # a bold lie
             # TODO: get those from the entry
             attrs.st_atime_ns = 10000
             attrs.st_mtime_ns = 10000
@@ -133,7 +138,8 @@ class ReFs(llfuse.Operations):
         logger.debug("[ReFs::readdir] done with this directory")
 
     def unlink(self, parent_inode, name, context):
-        parent = self.entries_by_inode(parent_inode)
+        name = os.fsdecode(name)
+        parent = self.entries_by_inode[parent_inode]
         logger.debug("[ReFs::unlink] %s in %s", name, parent)
 
         name = self.__get_entry_name(name)
@@ -151,6 +157,7 @@ class ReFs(llfuse.Operations):
         self.fs_changed = True
 
     def rmdir(self, parent_inode, name, context):
+        name = os.fsdecode(name)
         parent = self.entries_by_inode[parent_inode]
         logger.debug("[ReFs::rmdir] %s in %s", name in parent)
 
@@ -175,6 +182,8 @@ class ReFs(llfuse.Operations):
         self.fs_changed = True
 
     def rename(self, parent_inode_old, name_old, parent_inode_new, name_new, context):
+        name_old = os.fsdecode(name_old)
+        name_new = os.fsdecode(name_new)
         parent_old = self.entries_by_inode[parent_inode_old]
         parent_new = self.entries_by_inode[parent_inode_new]
         entry = parent_old.children[name_old]
@@ -210,6 +219,7 @@ class ReFs(llfuse.Operations):
         return self.__get_attrs(self.entries_by_inode[inode])
 
     def mknod(self, parent_inode, name, mode, dev, context):
+        name = os.fsdecode(name)
         parent = self.entries_by_inode[parent_inode]
         logger.debug("[ReFs::mknod] %s in %s", name, parent)
 
@@ -232,6 +242,7 @@ class ReFs(llfuse.Operations):
         return self.__get_attrs(entry)
 
     def mkdir(self, parent_inode, name, mode, ctx):
+        name = os.fsdecode(name)
         parent = self.entries_by_inode[parent_inode]
         logger.debug("[ReFs::mkdir] %s in %s", name, parent)
 
@@ -268,10 +279,7 @@ class ReFs(llfuse.Operations):
         return stat
 
     def open(self, inode, flags, context):
-        entry = self.entries_by_inode[inode]
-        logger.debug("[ReFs::open] %s", entry)
-        self.store.get_file(entry).load()
-        # nothing else to do here, just return the inode as the file handle itself
+        # nothing to do here, just return the inode as the file handle itself
         return inode
 
     def access(self, inode, mode, context):
@@ -305,33 +313,32 @@ class ReFs(llfuse.Operations):
         logger.debug("[ReFs::read] %s, %d bytes @ %d", inode, size, offset)
 
         entry = self.entries_by_inode[inode]
-        file = self.store.get_file(entry)
+        file = self.__get_file(entry)
         return file.read(size, offset)
 
     def write(self, inode, offset, data):
         logger.debug("[ReFs::write] %s, %d bytes @ %d", inode, len(data), offset)
 
         entry = self.entries_by_inode[inode]
-        file = self.store.get_file(entry)
+        file = self.__get_file(entry)
         return file.write(data, offset)
 
     def release(self, inode):
         logger.debug("[ReFs::release]")
-
-        entry = self.entries_by_inode[inode]
-        self.store.get_file(entry).close()
+        return self.flush(inode)
 
     def fsync(self, inode, datasync):
         logger.debug("[ReFs::fsync] %s", inode)
-
-        entry = self.entries_by_inode[inode]
-        self.store.get_file(entry).close()
+        return self.flush(inode)
 
     def flush(self, inode):
         logger.debug("[ReFs::flush] %s", inode)
 
         entry = self.entries_by_inode[inode]
-        self.store.get_file(entry).close()
+        file = self.__get_file(entry)
+        if file.modified:
+            self.client.put_pdf(file.data, document=entry)
+            file.modified = False
 
     def __get_node_name(self, entry):
         """Get the visible filename of an entry."""
@@ -345,6 +352,16 @@ class ReFs(llfuse.Operations):
         # strip file extension
         node_name = Path(node_name)
         return node_name.with_suffix("").name
+
+    def __get_file(self, document):
+        try:
+            return self.files[document]
+        except KeyError:
+            pass
+        data = self.client.get_pdf(document)
+        file = MemFile(data)
+        self.files[document] = file
+        return file
 
     # -------------- needed? -------------
 

@@ -6,7 +6,7 @@ from .constants import (
     ROOT_ID,
     TRASH_ID,
 )
-from .entries import Entry, Folder, Document, Pdf, DuplicateName
+from .entries import Entry, Folder, Pdf, DuplicateName
 
 logger = logging.getLogger(__name__)
 
