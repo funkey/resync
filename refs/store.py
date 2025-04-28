@@ -54,6 +54,7 @@ class RemarkableStore:
         # move entry
         parent = self.entries_by_uid[entry.parent_uid]
         parent.remove(entry)
+        self.__ensure_unique_name(folder, entry)
         folder.add(entry)
 
         # update entry metadata and store on reMarkable
@@ -105,10 +106,8 @@ class RemarkableStore:
                     )
                     continue
 
-            try:
-                parent.add(entry)
-            except DuplicateName:
-                entry.name += "_"
+            self.__ensure_unique_name(parent, entry)
+            parent.add(entry)
 
         # remember the root and trash folder as well
         entries_by_uid[ROOT_ID] = root
@@ -128,6 +127,13 @@ class RemarkableStore:
             uid = str(uuid.uuid4())
 
         return uid
+
+    def __ensure_unique_name(self, folder, entry):
+        while entry.name in folder.children:
+            logger.debug("%s already in %s, changing name...", entry, folder)
+            # crude strategy to resolve duplicate names (which we don't allow
+            # to make things easier, but the reMarkable is fine with)
+            entry.name += "_"
 
     def __repr__(self):
         return self.__rec_repr(self.root)
