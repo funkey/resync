@@ -94,13 +94,15 @@ class ReFs(llfuse.Operations):
         # default virtual file permissions
         attrs.st_mode = stat.S_IFREG | 0o666  # write by everyone
         attrs.st_nlink = 1
+        attrs.st_uid = os.getuid()
+        attrs.st_gid = os.getgid()
 
         if isinstance(entry, Folder):
             # default directory stats
             attrs.st_mode = stat.S_IFDIR | 0o755
             attrs.st_nlink = 2
         else:
-            attrs.st_size = self.store.open(entry).size
+            attrs.st_size = self.store.get_file(entry).size
             # TODO: get those from the entry
             attrs.st_atime_ns = 10000
             attrs.st_mtime_ns = 10000
@@ -211,7 +213,7 @@ class ReFs(llfuse.Operations):
         parent = self.entries_by_inode[parent_inode]
         logger.debug("[ReFs::mknod] %s in %s", name, parent)
 
-        name = Path(name)
+        name = Path(os.fsdecode(name))
         if name.suffix != ".pdf":
             logger.error("Only creation of PDF files allowed")
             raise llfuse.FUSEError(errno.EACCES)
@@ -227,7 +229,7 @@ class ReFs(llfuse.Operations):
 
         logger.info("[ReFs::mknod] created empty PDF document %s", entry)
 
-        return self.__getattr(entry)
+        return self.__get_attrs(entry)
 
     def mkdir(self, parent_inode, name, mode, ctx):
         parent = self.entries_by_inode[parent_inode]
@@ -243,7 +245,7 @@ class ReFs(llfuse.Operations):
 
         logger.info("[ReFs::mkdir] created folder %s", entry)
 
-        return self.__getattr(entry)
+        return self.__get_attrs(entry)
 
     def statfs(self, context):
         logger.debug("[ReFs::statfs]")
@@ -268,7 +270,8 @@ class ReFs(llfuse.Operations):
     def open(self, inode, flags, context):
         entry = self.entries_by_inode[inode]
         logger.debug("[ReFs::open] %s", entry)
-        # nothing to do here, just return the inode as the file handle itself
+        self.store.get_file(entry).load()
+        # nothing else to do here, just return the inode as the file handle itself
         return inode
 
     def access(self, inode, mode, context):
@@ -290,40 +293,45 @@ class ReFs(llfuse.Operations):
         # everything else is okay (read, write)
         return True
 
-    def create(self, parent_inode, name, mode, flags, ctx):
+    def create(self, parent_inode, name, mode, flags, context):
         logger.debug("[ReFs::create]")
+
+        name = os.fsdecode(name)
+        attrs = self.mknod(parent_inode, name, mode, dev=None, context=None)
+        inode = attrs.st_ino
+        return (inode, attrs)
 
     def read(self, inode, offset, size):
         logger.debug("[ReFs::read] %s, %d bytes @ %d", inode, size, offset)
 
         entry = self.entries_by_inode[inode]
-        file = self.store.open(entry)
+        file = self.store.get_file(entry)
         return file.read(size, offset)
 
     def write(self, inode, offset, data):
         logger.debug("[ReFs::write] %s, %d bytes @ %d", inode, len(data), offset)
 
         entry = self.entries_by_inode[inode]
-        file = self.store.open(entry)
+        file = self.store.get_file(entry)
         return file.write(data, offset)
 
     def release(self, inode):
         logger.debug("[ReFs::release]")
 
         entry = self.entries_by_inode[inode]
-        self.store.open(entry).close()
+        self.store.get_file(entry).close()
 
     def fsync(self, inode, datasync):
         logger.debug("[ReFs::fsync] %s", inode)
 
         entry = self.entries_by_inode[inode]
-        self.store.open(entry).close()
+        self.store.get_file(entry).close()
 
     def flush(self, inode):
         logger.debug("[ReFs::flush] %s", inode)
 
         entry = self.entries_by_inode[inode]
-        self.store.open(entry).close()
+        self.store.get_file(entry).close()
 
     def __get_node_name(self, entry):
         """Get the visible filename of an entry."""
