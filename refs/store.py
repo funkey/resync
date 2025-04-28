@@ -7,7 +7,6 @@ from .constants import (
     TRASH_ID,
 )
 from .entries import Entry, Folder, Document, Pdf, DuplicateName
-from .refile import ReFile
 
 logger = logging.getLogger(__name__)
 
@@ -29,19 +28,6 @@ class RemarkableStore:
         assert isinstance(folder, Folder)
         yield from folder.children.values()
 
-    def get_file(self, document):
-        """Get the file object associated with a document."""
-        logger.debug("[RemarkableStore::get_file] %s", document)
-        if document in self.open_files:
-            logger.debug("[RemarkableStore::get_file] already created")
-            return self.open_files[document]
-
-        assert isinstance(document, Document)
-        logger.debug("[RemarkableStore::get_file] creating ReFile for %s", document)
-        file = ReFile(document, self.fs)
-        self.open_files[document] = file
-        return file
-
     def create(self, parent_folder, name, cls):
         """Create a new empty entry."""
         if cls not in [Pdf, Folder]:
@@ -50,17 +36,16 @@ class RemarkableStore:
             )
 
         uid = self.__create_new_uid()
-        entry = cls(uid)
+        entry = cls(self.fs, uid)
         entry.name = name
         entry.parent_uid = parent_folder.uid
         parent_folder.add(entry)
         self.entries_by_uid[uid] = entry
 
-        entry.sync(self.fs)
-
         return entry
 
     def move(self, entry, folder):
+        """Move an entry to another folder."""
         logger.info("Moving %s to %s...", entry, folder)
 
         if not isinstance(entry, Folder) and not isinstance(entry, Pdf):
@@ -73,26 +58,17 @@ class RemarkableStore:
 
         # update entry metadata and store on reMarkable
         entry.parent_uid = folder.uid
-        entry.sync(self.fs)
 
     def delete(self, entry):
+        """Delete an entry by moving it to the trash."""
         self.move(entry, self.trash)
 
     def rename(self, entry, name):
+        """Change the name of an entry."""
         parent = self.entries_by_uid[entry.parent_uid]
         parent.remove(entry)
         entry.name = name
         parent.add(entry)
-
-        entry.sync(self.fs)
-
-    def sync(self):
-        # write data for all open document entries
-        for entry, file in self.open_files.items():
-            file.close()
-        # sync metadatelse to a of all entries
-        for entry in self.entries_by_uid.values():
-            entry.sync(self.fs)
 
     def __scan_entries(self):
         logger.info("Scanning documents...")
@@ -106,8 +82,8 @@ class RemarkableStore:
 
         entries_by_uid = {uid: Entry.create_from_fs(uid, self.fs) for uid in uids}
 
-        root = Folder.create_root()
-        trash = Folder.create_trash()
+        root = Folder.create_root(self.fs)
+        trash = Folder.create_trash(self.fs)
 
         # link entries to their parents
         for uid, entry in entries_by_uid.items():

@@ -79,35 +79,9 @@ class ReFile:
             self.data_changed = False
             logger.debug("  ...done.")
 
-    def read_data(self, annotations_only=False):
-        """Read the data associated with a document."""
-        if not (isinstance(self.document, Pdf) or isinstance(self.document, Notebook)):
-            raise RuntimeError(
-                "Reading entries other than Notebook or Pdf not yet implemented"
-            )
-
-        self._data = self.__read_as_pdf(annotations_only)
-        self.data_changed = False
-
-    def write_data(self):
-        """Write a document (with associated data) to the reMarkable."""
-        if not isinstance(self.document, Pdf):
-            raise NotImplementedError(
-                "Writing entries other than Pdf not yet implemented"
-            )
-
-        self.fs.write_file(self._data, self.document.uid + ".pdf")
-        self.fs.write_file("", self.document.uid + ".pagedata")
-        self.fs.make_dir(self.document.uid)
-        self.document.sync(self.fs)
-
     def truncate(self, length):
         if length < self.size:
             self._data = self._data[:length]
 
     def utime(self, times):
         self.atime, self.mtime = times
-
-    def __read_as_pdf(self, annotations_only):
-        # TODO: actually create the PDF data and return it here
-        return b"Hello, world!"
