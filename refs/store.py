@@ -29,12 +29,15 @@ class RemarkableStore:
         assert isinstance(folder, Folder)
         yield from folder.children.values()
 
-    def open(self, document):
+    def get_file(self, document):
         """Get the file object associated with a document."""
+        logger.debug("[RemarkableStore::get_file] %s", document)
         if document in self.open_files:
+            logger.debug("[RemarkableStore::get_file] already created")
             return self.open_files[document]
 
         assert isinstance(document, Document)
+        logger.debug("[RemarkableStore::get_file] creating ReFile for %s", document)
         file = ReFile(document, self.fs)
         self.open_files[document] = file
         return file
@@ -86,8 +89,8 @@ class RemarkableStore:
     def sync(self):
         # write data for all open document entries
         for entry, file in self.open_files.items():
-            file.flush()
-        # sync metadata of all entries
+            file.close()
+        # sync metadatelse to a of all entries
         for entry in self.entries_by_uid.values():
             entry.sync(self.fs)
 
