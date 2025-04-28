@@ -31,6 +31,13 @@ class ReFs(llfuse.Operations):
         # map from entries to memory files
         self.files = {}
 
+        # map from inodes to memory files we don't want to keep
+        # (some OSes leave their junk everywhere, we collect that here and just
+        # pretend it is persistent but don't keep it)
+        self.junk_files = {}
+        # map from (parent_inode, name) to inode
+        self.name_to_inode = {}
+
         self.next_inode = llfuse.ROOT_INODE
         self.__init_maps(self.store.root)
 
@@ -60,6 +67,10 @@ class ReFs(llfuse.Operations):
         name = self.__get_entry_name(os.fsdecode(name))
         logger.debug("[ReFs::lookup] parent_inode=%s, name=%s", parent_inode, name)
 
+        if self.__is_junk_file(name):
+            inode = self.__get_inode(parent_inode, name)
+            return self.__create_default_file_attrs(inode)
+
         parent = self.entries_by_inode[parent_inode]
         if name == ".":
             entry = parent
@@ -77,6 +88,9 @@ class ReFs(llfuse.Operations):
     def getattr(self, inode, context=None):
         logger.debug("[ReFs::getattr] inode %s", inode)
 
+        if inode in self.junk_files:
+            return self.__create_default_file_attrs(inode)
+
         try:
             entry = self.entries_by_inode[inode]
         except KeyError:
@@ -88,16 +102,8 @@ class ReFs(llfuse.Operations):
         return self.__get_attrs(entry)
 
     def __get_attrs(self, entry):
-        attrs = llfuse.EntryAttributes()
-
-        # set inode
-        attrs.st_ino = self.inodes_by_entry[entry]
-
-        # default virtual file permissions
-        attrs.st_mode = stat.S_IFREG | 0o666  # write by everyone
-        attrs.st_nlink = 1
-        attrs.st_uid = os.getuid()
-        attrs.st_gid = os.getgid()
+        inode = self.inodes_by_entry[entry]
+        attrs = self.__create_default_file_attrs(inode)
 
         if isinstance(entry, Folder):
             # default directory stats
@@ -113,6 +119,15 @@ class ReFs(llfuse.Operations):
             attrs.st_mtime_ns = 10000
             attrs.st_ctime_ns = 10000
 
+        return attrs
+
+    def __create_default_file_attrs(self, inode):
+        attrs = llfuse.EntryAttributes()
+        attrs.st_mode = stat.S_IFREG | 0o666  # write by everyone
+        attrs.st_nlink = 1
+        attrs.st_uid = os.getuid()
+        attrs.st_gid = os.getgid()
+        attrs.st_ino = inode
         return attrs
 
     def opendir(self, inode, ctx):
@@ -186,7 +201,6 @@ class ReFs(llfuse.Operations):
         name_new = os.fsdecode(name_new)
         parent_old = self.entries_by_inode[parent_inode_old]
         parent_new = self.entries_by_inode[parent_inode_new]
-        entry = parent_old.children[name_old]
 
         logger.debug(
             "[ReFs::rename] %s in %s to %s in %s",
@@ -195,6 +209,7 @@ class ReFs(llfuse.Operations):
             name_new,
             parent_new,
         )
+        entry = parent_old.children[name_old]
 
         # delete target, if it exists
         if name_new in parent_new.children:
@@ -215,11 +230,18 @@ class ReFs(llfuse.Operations):
 
     def setattr(self, inode, attr, fields, fh, ctx):
         logger.debug("[ReFs::setattr] for %s, will ignore", inode)
-        # do nothing, this is not supported
+        if inode in self.junk_files:
+            return self.__create_default_file_attrs(inode)
+        # do nothing, we don't support changing of attributes
         return self.__get_attrs(self.entries_by_inode[inode])
 
     def mknod(self, parent_inode, name, mode, dev, context):
         name = os.fsdecode(name)
+
+        if self.__is_junk_file(name):
+            inode = self.name_to_inode[(parent_inode, name)]
+            return self.__create_default_file_attrs(inode)
+
         parent = self.entries_by_inode[parent_inode]
         logger.debug("[ReFs::mknod] %s in %s", name, parent)
 
@@ -312,12 +334,18 @@ class ReFs(llfuse.Operations):
     def read(self, inode, offset, size):
         logger.debug("[ReFs::read] %s, %d bytes @ %d", inode, size, offset)
 
+        if inode in self.junk_files:
+            return self.junk_files[inode].read(size, offset)
+
         entry = self.entries_by_inode[inode]
         file = self.__get_file(entry)
         return file.read(size, offset)
 
     def write(self, inode, offset, data):
         logger.debug("[ReFs::write] %s, %d bytes @ %d", inode, len(data), offset)
+
+        if inode in self.junk_files:
+            return self.junk_files[inode].write(data, offset)
 
         entry = self.entries_by_inode[inode]
         file = self.__get_file(entry)
@@ -333,6 +361,9 @@ class ReFs(llfuse.Operations):
 
     def flush(self, inode):
         logger.debug("[ReFs::flush] %s", inode)
+
+        if inode in self.junk_files:
+            return
 
         entry = self.entries_by_inode[inode]
         file = self.__get_file(entry)
@@ -362,6 +393,29 @@ class ReFs(llfuse.Operations):
         file = MemFile(data)
         self.files[document] = file
         return file
+
+    def __is_junk_file(self, name):
+        # AppleDouble files
+        if name.startswith("._"):
+            return True
+
+        if name == ".DS_Store":
+            return True
+
+        return False
+
+    def __get_inode(self, parent_inode, name):
+        try:
+            return self.name_to_inode[(parent_inode, name)]
+        except KeyError:
+            pass
+
+        inode = self.next_inode
+        self.next_inode += 1
+        self.junk_files[inode] = MemFile()
+        self.name_to_inode[(parent_inode, name)] = inode
+
+        return inode
 
     # -------------- needed? -------------
 
