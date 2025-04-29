@@ -1,6 +1,7 @@
 from .client import RemarkableClient
-from .entries import Folder, Pdf
+from .entries import Folder, Document, Pdf
 from .memfile import MemFile
+from bidict import bidict
 from pathlib import Path
 import errno
 import llfuse
@@ -12,8 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 class ReFs(llfuse.Operations):
-    """Implementation of the FUSE filesystem."""
-
     def __init__(self, remarkable_address, username="root", document_root=None):
         super().__init__()
 
@@ -25,182 +24,158 @@ class ReFs(llfuse.Operations):
         logger.info("Connected.")
 
         # map from inodes to entries and back
-        self.entries_by_inode = {}
-        self.inodes_by_entry = {}
+        self.entries = bidict()
 
-        # map from entries to memory files
+        # map from document entries to in-memory files
         self.files = {}
 
-        # map from inodes to memory files we don't want to keep
-        # (some OSes leave their junk everywhere, we collect that here and just
-        # pretend it is persistent but don't keep it)
-        self.junk_files = {}
-        # map from (parent_inode, name) to inode
-        self.name_to_inode = {}
-
-        self.next_inode = llfuse.ROOT_INODE
+        # setup initial maps
+        self.__next_inode = llfuse.ROOT_INODE
+        self.__fs_changed = False
         self.__init_maps(self.store.root)
-
-        self.fs_changed = False
 
         logger.info("ReFs mounted")
 
     def __init_maps(self, entry):
         """Recursively get all class:`Entry`s."""
-        inode = self.next_inode
-        self.next_inode += 1
-        self.entries_by_inode[inode] = entry
-        self.inodes_by_entry[entry] = inode
+        inode = self.__next_inode
+        self.__next_inode += 1
+
+        self.entries[inode] = entry
 
         if isinstance(entry, Folder):
             for child in entry.children.values():
                 self.__init_maps(child)
+        else:
+            self.files[entry] = MemFile(attrs=self.__default_file_attrs(inode))
+
+    def statfs(self, context=None):
+        stat = llfuse.StatvfsData()
+        stat.f_bsize = 512
+        stat.f_frsize = 512
+        size = sum(f.size for f in self.files.values())
+        stat.f_blocks = size // stat.f_frsize
+        stat.f_bfree = max(size // stat.f_frsize, 1024)
+        stat.f_bavail = stat.f_bfree
+        inodes = len(self.entries)
+        stat.f_files = inodes
+        stat.f_ffree = max(inodes, 10000)
+        stat.f_favail = stat.f_ffree
+        return stat
 
     def destroy(self):
-        logger.debug("Unmounting...")
+        logger.debug("[ReFs::destroy] unmounting...")
 
-        if self.fs_changed:
-            logger.debug("Changes made, restarting xochitl...")
+        if self.__fs_changed:
+            logger.debug("[ReFs::destroy] changes made, restarting xochitl...")
             self.client.restart()
 
     def lookup(self, parent_inode, name, ctx=None):
-        name = self.__get_entry_name(os.fsdecode(name))
-        logger.debug("[ReFs::lookup] parent_inode=%s, name=%s", parent_inode, name)
-
-        if self.__is_junk_file(name):
-            inode = self.__get_inode(parent_inode, name)
-            return self.__create_default_file_attrs(inode)
-
-        parent = self.entries_by_inode[parent_inode]
-        if name == ".":
-            entry = parent
-        elif name == "..":
-            entry = self.entries_by_inode[parent.parent_uid]
-        else:
-            if name not in parent.children:
-                logger.debug("[ReFs::lookup] does not exist")
-                raise llfuse.FUSEError(errno.ENOENT)
-
-            entry = parent.children[name]
-
-        return self.__get_attrs(entry)
+        """Given parent inode and file name, return attributes."""
+        name = os.fsdecode(name)
+        entry = self.__get_entry(parent_inode, name)
+        return self.__get_attr(entry)
 
     def getattr(self, inode, context=None):
-        logger.debug("[ReFs::getattr] inode %s", inode)
+        """Get attributes by inode."""
+        entry = self.__get_entry(inode)
+        return self.__get_attr(entry)
 
-        if inode in self.junk_files:
-            return self.__create_default_file_attrs(inode)
-
-        try:
-            entry = self.entries_by_inode[inode]
-        except KeyError:
-            logger.debug("[ReFs::getattr] no entry for inode %s found", inode)
-            raise llfuse.FUSEError(errno.ENOENT)
-
-        logger.debug("[ReFs::getattr] for entry %s", entry)
-
-        return self.__get_attrs(entry)
-
-    def __get_attrs(self, entry):
-        inode = self.inodes_by_entry[entry]
-        attrs = self.__create_default_file_attrs(inode)
+    def setattr(self, inode, attr, fields, fh, ctx):
+        entry = self.__get_entry(inode)
+        logger.debug("[ReFs::setattr] for %s", entry)
 
         if isinstance(entry, Folder):
-            # default directory stats
-            attrs.st_mode = stat.S_IFDIR | 0o755
-            attrs.st_nlink = 2
-        else:
-            if entry in self.files:
-                attrs.st_size = self.files[entry].size
-            else:
-                attrs.st_size = 1912  # a bold lie
-            # TODO: get those from the entry
-            attrs.st_atime_ns = 10000
-            attrs.st_mtime_ns = 10000
-            attrs.st_ctime_ns = 10000
+            # do nothing for folders
+            return self.__default_dir_attrs(inode)
 
-        return attrs
+        file = self.files[entry]
+        file.update_attrs(fields, attr)
+        return file.attrs
 
-    def __create_default_file_attrs(self, inode):
-        attrs = llfuse.EntryAttributes()
-        attrs.st_mode = stat.S_IFREG | 0o666  # write by everyone
-        attrs.st_nlink = 1
-        attrs.st_uid = os.getuid()
-        attrs.st_gid = os.getgid()
-        attrs.st_ino = inode
-        return attrs
+    def setxattr(self, inode, name, value, ctx):
+        # We need to keep this one around to please (at least) MacOS. It seems
+        # okay to do nothing here.
+        pass
 
-    def opendir(self, inode, ctx):
-        logger.debug("[ReFs::opendir] %s", inode)
-        # we reuse the inode for the file handle
+    def open(self, inode, flags, context):
+        logger.debug("[ReFs::open] %s", inode)
+        document = self.__get_document_entry(inode)
+        self.__load_file(document)
         return inode
 
-    def readdir(self, parent_inode, offset):
-        folder = self.entries_by_inode[parent_inode]
-        logger.debug("[ReFs::readdir] folder=%s, offset=%d", folder, offset)
+    def opendir(self, inode, context=None):
+        return inode
 
-        assert isinstance(folder, Folder)
+    def read(self, inode, offset, size):
+        logger.debug("[ReFs::read] %s, %d bytes @ %d", inode, size, offset)
+
+        document = self.__get_document_entry(inode)
+        file = self.files[document]
+
+        return file.read(size, offset)
+
+    def readdir(self, parent_inode, offset):
+        folder = self.__get_folder_entry(parent_inode)
 
         child_entries = sorted(folder.children.values())
-        logger.debug(child_entries)
         for i, entry in enumerate(child_entries[offset:]):
             name = self.__get_node_name(entry)
-            inode = self.inodes_by_entry[entry]
-            logger.debug("[ReFs::readdir] entry=%s, inode=%s", entry, inode)
-            attrs = self.__get_attrs(entry)
+            attrs = self.__get_attr(entry)
             result = (os.fsencode(name), attrs, offset + i + 1)
             yield result
-        logger.debug("[ReFs::readdir] done with this directory")
 
-    def unlink(self, parent_inode, name, context):
-        name = os.fsdecode(name)
-        parent = self.entries_by_inode[parent_inode]
-        logger.debug("[ReFs::unlink] %s in %s", name, parent)
+    def create(self, parent_inode, name, mode, flags, context=None):
+        name = Path(os.fsdecode(name))
+        parent = self.__get_folder_entry(parent_inode)
+        logger.debug("[ReFs::create] %s in %s", name, parent)
 
-        name = self.__get_entry_name(name)
-
-        if name not in parent.children:
-            raise llfuse.FUSEError(errno.ENOENT)
-
-        entry = parent.children[name]
-        inode = self.inodes_by_entry[entry]
-
-        self.store.delete(entry)
-        del self.entries_by_inode[inode]
-        del self.inodes_by_entry[entry]
-
-        self.fs_changed = True
-
-    def rmdir(self, parent_inode, name, context):
-        name = os.fsdecode(name)
-        parent = self.entries_by_inode[parent_inode]
-        logger.debug("[ReFs::rmdir] %s in %s", name in parent)
+        self.__validate_path(name)
 
         name = self.__get_entry_name(name)
+        entry = self.store.create(parent, name, Pdf)
+        inode = self.__next_inode
+        file = MemFile(attrs=self.__default_file_attrs(inode))
+        self.__next_inode += 1
 
-        if name not in parent.children:
-            raise llfuse.FUSEError(errno.ENOENT)
+        self.entries[inode] = entry
+        self.files[entry] = file
+        self.__fs_changed = True
 
-        folder = parent.children[name]
-        assert isinstance(folder, Folder)
+        logger.info("[ReFs::create] created empty PDF document %s", entry)
+        return (inode, file.attrs)
 
-        empty = len(folder.children) == 0
-        if not empty:
-            raise llfuse.FUSEError(errno.ENOTEMPTY)
+    def mkdir(self, parent_inode, name, mode, ctx):
+        name = os.fsdecode(name)
+        parent = self.__get_folder_entry(parent_inode)
+        logger.debug("[ReFs::mkdir] %s in %s", name, parent)
 
-        inode = self.inodes_by_entry[folder]
+        entry = self.store.create(parent, name, Folder)
+        inode = self.__next_inode
+        self.__next_inode += 1
 
-        self.store.delete(folder)
-        del self.entries_by_inode[inode]
-        del self.inodes_by_entry[folder]
+        self.entries[inode] = entry
+        self.__fs_changed = True
 
-        self.fs_changed = True
+        logger.info("[ReFs::mkdir] created folder %s", entry)
+        return self.__get_attr(entry)
+
+    def write(self, inode, offset, data):
+        logger.debug("[ReFs::write] %s, %d bytes @ %d", inode, len(data), offset)
+
+        document = self.__get_document_entry(inode)
+        logger.debug("[ReFs::write] this is document %s", document)
+        file = self.files[document]
+        self.__fs_changed = True
+        return file.write(data, offset)
 
     def rename(self, parent_inode_old, name_old, parent_inode_new, name_new, context):
         name_old = os.fsdecode(name_old)
         name_new = os.fsdecode(name_new)
-        parent_old = self.entries_by_inode[parent_inode_old]
-        parent_new = self.entries_by_inode[parent_inode_new]
+        entry_name_old = self.__get_entry_name(name_old)
+        entry_name_new = self.__get_entry_name(name_new)
+        parent_old = self.__get_folder_entry(parent_inode_old)
+        parent_new = self.__get_folder_entry(parent_inode_new)
 
         logger.debug(
             "[ReFs::rename] %s in %s to %s in %s",
@@ -209,167 +184,92 @@ class ReFs(llfuse.Operations):
             name_new,
             parent_new,
         )
-        entry = parent_old.children[name_old]
+        entry = parent_old.children[entry_name_old]
 
         # delete target, if it exists
-        if name_new in parent_new.children:
-            target_entry = parent_new.children[name_new]
+        if entry_name_new in parent_new.children:
+            target_entry = parent_new.children[entry_name_new]
             if isinstance(target_entry, Folder):
                 logger.error("Can not move onto a folder")
                 raise llfuse.FUSEError(errno.EACCES)
-
             self.unlink(parent_inode_new, name_new, context)
 
         # target does not exist (anymore), just a rename
         # TODO: this can cause trouble if the new name already exists in the
         # old parent
-        self.store.rename(entry, name_new)
+        self.store.rename(entry, entry_name_new)
         self.store.move(entry, parent_new)
 
-        self.fs_changed = True
+        self.__fs_changed = True
 
-    def setattr(self, inode, attr, fields, fh, ctx):
-        logger.debug("[ReFs::setattr] for %s, will ignore", inode)
-        if inode in self.junk_files:
-            return self.__create_default_file_attrs(inode)
-        # do nothing, we don't support changing of attributes
-        return self.__get_attrs(self.entries_by_inode[inode])
-
-    def mknod(self, parent_inode, name, mode, dev, context):
+    def unlink(self, parent_inode, name, context):
         name = os.fsdecode(name)
+        document = self.__get_document_entry(parent_inode, name)
+        inode = self.entries.inverse[document]
 
-        if self.__is_junk_file(name):
-            inode = self.name_to_inode[(parent_inode, name)]
-            return self.__create_default_file_attrs(inode)
+        logger.debug("[ReFs::unlink] %s", document)
+        self.__delete(document, inode)
 
-        parent = self.entries_by_inode[parent_inode]
-        logger.debug("[ReFs::mknod] %s in %s", name, parent)
+    def rmdir(self, parent_inode, name, context):
+        name = os.fsdecode(name)
+        folder = self.__get_folder_entry(parent_inode, name)
+        inode = self.entries.inverse[folder]
 
-        name = Path(os.fsdecode(name))
-        if name.suffix != ".pdf":
-            logger.error("Only creation of PDF files allowed")
-            raise llfuse.FUSEError(errno.EACCES)
+        logger.debug("[ReFs::rmdir] %s", folder)
+        empty = len(folder.children) == 0
+        if not empty:
+            raise llfuse.FUSEError(errno.ENOTEMPTY)
+        self.__delete(folder, inode)
 
+    def __get_attr(self, entry):
+        if isinstance(entry, Document):
+            file = self.files[entry]
+            attrs = file.attrs
+            if file.size == 0:
+                # sweet little lie if there is no data yet (this is to allow
+                # subsequent load-on-the-fly and read operations, which
+                # otherwise would be skipped)
+                attrs.st_size = 1024**3
+            return attrs
+        else:
+            inode = self.entries.inverse[entry]
+            return self.__default_dir_attrs(inode)
+
+    def __get_document_entry(self, inode, name=None):
+        document = self.__get_entry(inode, name)
+        if not isinstance(document, Document):
+            raise llfuse.FUSEError(errno.ENOENT)
+        return document
+
+    def __get_folder_entry(self, inode, name=None):
+        folder = self.__get_entry(inode, name)
+        if not isinstance(folder, Folder):
+            raise llfuse.FUSEError(errno.ENOTDIR)
+        return folder
+
+    def __get_entry(self, inode, name=None):
+        """Find an entry based on its inode or its parent inode and its name."""
+        try:
+            entry = self.entries[inode]
+        except KeyError:
+            raise llfuse.FUSEError(errno.ENOENT)
+
+        if name is None:
+            return entry
         name = self.__get_entry_name(name)
-        entry = self.store.create(parent, name, Pdf)
-        inode = self.next_inode
-        self.next_inode += 1
 
-        self.entries_by_inode[inode] = entry
-        self.inodes_by_entry[entry] = inode
-        self.fs_changed = True
+        # inode is parent dir
+        for child in entry.children.values():
+            if child.name == name:
+                return child
 
-        logger.info("[ReFs::mknod] created empty PDF document %s", entry)
+        # no entry with that name in parent
+        raise llfuse.FUSEError(errno.ENOENT)
 
-        return self.__get_attrs(entry)
-
-    def mkdir(self, parent_inode, name, mode, ctx):
-        name = os.fsdecode(name)
-        parent = self.entries_by_inode[parent_inode]
-        logger.debug("[ReFs::mkdir] %s in %s", name, parent)
-
-        entry = self.store.create(parent, name, Folder)
-        inode = self.next_inode
-        self.next_inode += 1
-
-        self.entries_by_inode[inode] = entry
-        self.inodes_by_entry[entry] = inode
-        self.fs_changed = True
-
-        logger.info("[ReFs::mkdir] created folder %s", entry)
-
-        return self.__get_attrs(entry)
-
-    def statfs(self, context):
-        logger.debug("[ReFs::statfs]")
-
-        stat = llfuse.StatvfsData()
-
-        stat.f_bsize = 512
-        stat.f_frsize = 512
-
-        size = sum(f.size for f in self.store.open_files.values())
-        stat.f_blocks = size // stat.f_frsize
-        stat.f_bfree = max(size // stat.f_frsize, 1024)
-        stat.f_bavail = stat.f_bfree
-
-        inodes = len(self.inodes_by_entry)
-        stat.f_files = inodes
-        stat.f_ffree = max(inodes, 100)
-        stat.f_favail = stat.f_ffree
-
-        return stat
-
-    def open(self, inode, flags, context):
-        # nothing to do here, just return the inode as the file handle itself
-        return inode
-
-    def access(self, inode, mode, context):
-        # handles F_OK (file exists)
-        if inode not in self.entries_by_inode:
-            return False
-
-        entry = self.entries_by_inode[inode]
-        logger.debug("[ReFs::access] %s", entry)
-
-        # handles directory access
-        if (mode & os.X_OK) and isinstance(entry, Folder):
-            return True
-
-        # handles X_OK (is executable)
-        if mode & os.X_OK:
-            return False
-
-        # everything else is okay (read, write)
-        return True
-
-    def create(self, parent_inode, name, mode, flags, context):
-        logger.debug("[ReFs::create]")
-
-        name = os.fsdecode(name)
-        attrs = self.mknod(parent_inode, name, mode, dev=None, context=None)
-        inode = attrs.st_ino
-        return (inode, attrs)
-
-    def read(self, inode, offset, size):
-        logger.debug("[ReFs::read] %s, %d bytes @ %d", inode, size, offset)
-
-        if inode in self.junk_files:
-            return self.junk_files[inode].read(size, offset)
-
-        entry = self.entries_by_inode[inode]
-        file = self.__get_file(entry)
-        return file.read(size, offset)
-
-    def write(self, inode, offset, data):
-        logger.debug("[ReFs::write] %s, %d bytes @ %d", inode, len(data), offset)
-
-        if inode in self.junk_files:
-            return self.junk_files[inode].write(data, offset)
-
-        entry = self.entries_by_inode[inode]
-        file = self.__get_file(entry)
-        return file.write(data, offset)
-
-    def release(self, inode):
-        logger.debug("[ReFs::release]")
-        return self.flush(inode)
-
-    def fsync(self, inode, datasync):
-        logger.debug("[ReFs::fsync] %s", inode)
-        return self.flush(inode)
-
-    def flush(self, inode):
-        logger.debug("[ReFs::flush] %s", inode)
-
-        if inode in self.junk_files:
-            return
-
-        entry = self.entries_by_inode[inode]
-        file = self.__get_file(entry)
-        if file.modified:
-            self.client.put_pdf(file.data, document=entry)
-            file.modified = False
+    def __get_entry_name(self, filename):
+        """Get the name of an entry from its filename."""
+        # strip file extension
+        return Path(filename).with_suffix("").name
 
     def __get_node_name(self, entry):
         """Get the visible filename of an entry."""
@@ -379,53 +279,46 @@ class ReFs(llfuse.Operations):
         # everything that is not a folder can be read as a PDF
         return entry.name + ".pdf"
 
-    def __get_entry_name(self, node_name):
-        # strip file extension
-        node_name = Path(node_name)
-        return node_name.with_suffix("").name
+    def __validate_path(self, path):
+        """Ensure that a file with this path is allowed to be on our filesystem."""
+        if path.suffix != ".pdf":
+            logger.error("Only creation of PDF files allowed")
+            raise llfuse.FUSEError(errno.EACCES)
 
-    def __get_file(self, document):
-        try:
-            return self.files[document]
-        except KeyError:
-            pass
-        data = self.client.get_pdf(document)
-        file = MemFile(data)
-        self.files[document] = file
-        return file
+        if path.name.startswith("._") or path.name == ".DS_Store":
+            logger.debug("MacOS trying to litter our FS. Nope.")
+            raise llfuse.FUSEError(errno.EACCES)
 
-    def __is_junk_file(self, name):
-        # AppleDouble files
-        if name.startswith("._"):
-            return True
+    def __default_file_attrs(self, inode):
+        attrs = llfuse.EntryAttributes()
+        attrs.st_ino = inode
+        attrs.generation = 0
+        attrs.entry_timeout = 300
+        attrs.attr_timeout = 300
+        attrs.st_mode = stat.S_IFREG | 0o666  # write by everyone
+        attrs.st_nlink = 1
+        attrs.st_uid = os.getuid()
+        attrs.st_gid = os.getgid()
+        attrs.st_blksize = 512
+        attrs.st_blocks = 1
+        return attrs
 
-        if name == ".DS_Store":
-            return True
+    def __default_dir_attrs(self, inode):
+        attrs = self.__default_file_attrs(inode)
+        attrs.st_mode = stat.S_IFDIR | 0o755
+        return attrs
 
-        return False
+    def __load_file(self, document):
+        logger.debug("[ReFs::__load_file] loading PDF data for %s", document)
+        file = self.files[document]
+        # if not loaded yet
+        if file.size == 0:
+            file.data = bytearray(self.client.get_pdf(document))
+            inode = self.entries.inverse[document]
+            llfuse.invalidate_inode(inode)
 
-    def __get_inode(self, parent_inode, name):
-        try:
-            return self.name_to_inode[(parent_inode, name)]
-        except KeyError:
-            pass
-
-        inode = self.next_inode
-        self.next_inode += 1
-        self.junk_files[inode] = MemFile()
-        self.name_to_inode[(parent_inode, name)] = inode
-
-        return inode
-
-    # -------------- needed? -------------
-
-    def readlink(self, inode, ctx):
-        logger.debug("[ReFs::readlink] %s", inode)
-        return inode
-
-    def link(self, inode, new_inode_p, new_name, ctx):
-        logger.debug("[ReFs::link] %s", inode)
-        raise NotImplementedError
-
-    def forget(self, inode_list):
-        logger.debug("ReFs::forget")
+    def __delete(self, entry, inode):
+        self.store.delete(entry)
+        # TODO: only remove if permanently deleted, that needs support in store
+        # del self.entries[inode]
+        self.__fs_changed = True
