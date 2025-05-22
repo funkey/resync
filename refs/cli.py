@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
-from .refs import ReFs
-from .find import find_remarkable
 import argparse
-import llfuse
 import logging
-import os
+import platform
 import sys
+
+import llfuse
+
+from .find import find_remarkable
+from .refs import ReFs
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -29,13 +31,8 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
     if args.verbose:
-        logging.getLogger("resync.client").setLevel(logging.DEBUG)
-        logging.getLogger("resync.find").setLevel(logging.DEBUG)
-        logging.getLogger("resync.refile").setLevel(logging.DEBUG)
-        logging.getLogger("resync.refs").setLevel(logging.DEBUG)
-
-    uid = os.getuid()
-    gid = os.getgid()
+        logging.getLogger("refs.client").setLevel(logging.DEBUG)
+        logging.getLogger("refs.find").setLevel(logging.DEBUG)
 
     remarkable_address = args.remarkable_address
     mount_dir = args.mount_dir
@@ -47,14 +44,15 @@ def main():
         logging.error("reMarkable not found, please provide a hostname or address.")
         sys.exit(1)
 
-    logging.info(
-        "Mounting %s to %s (user %d, group %d)", remarkable_address, mount_dir, uid, gid
-    )
+    logging.info("Mounting %s to %s", remarkable_address, mount_dir)
 
-    # prepare sys.argv for FUSE
-    sys.argv = [sys.argv[0], "-f", "-o", f"uid={uid}", "-o", f"gid={gid}", mount_dir]
+    fs = ReFs(remarkable_address, "root", "/home/root/.local/share/remarkable/xochitl")
 
-    server = ReFs(remarkable_address)
-
-    server.parse(errex=1)
-    server.main()
+    fuse_options = set(llfuse.default_options)
+    fuse_options.add("fsname=ReFs")
+    # fuse_options.discard("default_permissions")
+    if platform.system() == "Darwin":
+        fuse_options.add("noappledouble")
+    llfuse.init(fs, mount_dir, fuse_options)
+    llfuse.main(workers=1)
+    llfuse.close()
