@@ -1,13 +1,15 @@
-from .client import RemarkableClient
-from .entries import Folder, Document, Pdf
-from .memfile import MemFile
-from bidict import bidict
-from pathlib import Path
 import errno
-import llfuse
+import logging
 import os
 import stat
-import logging
+from pathlib import Path
+
+import llfuse
+from bidict import bidict
+
+from .client import RemarkableClient
+from .entries import Document, Folder, Pdf
+from .memfile import MemFile
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +315,8 @@ class ReFs(llfuse.Operations):
         file = self.files[document]
         # if not loaded yet
         if file.size == 0:
-            file.data = bytearray(self.client.get_pdf(document))
+            data = self.client.get_pdf(document)
+            file.data = data
             inode = self.entries.inverse[document]
             llfuse.invalidate_inode(inode)
 

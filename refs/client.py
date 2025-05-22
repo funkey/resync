@@ -1,10 +1,11 @@
 import logging
-import paramiko
-from .filesystem import SshFileSystem
-from .store import RemarkableStore
-from .render import render_document
-from .entries import Pdf, Notebook
 
+import paramiko
+
+from .entries import Pdf
+from .filesystem import SshFileSystem
+from .render import render_document
+from .store import RemarkableStore
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +38,6 @@ class RemarkableClient:
     def get_pdf(self, document):
         """Get PDF data associated with a document."""
         logger.debug("[RemarkableClient::get_pdf] %s", document)
-
-        if not (isinstance(document, Pdf) or isinstance(document, Notebook)):
-            raise NotImplementedError(
-                "Reading entries other than Notebook or Pdf not yet implemented"
-            )
 
         return render_document(document)
 

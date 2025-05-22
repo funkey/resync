@@ -1,3 +1,7 @@
+import requests
+
+
 def render_document(document):
     """Render a document into a PDF."""
-    return b"Replace with actual PDF data :)"
+    response = requests.get(f"http://10.11.99.1/download/{document.uid}/pdf")
+    return response.content
